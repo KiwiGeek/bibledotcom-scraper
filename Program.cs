@@ -1,816 +1,102 @@
 ﻿using System.Text;
-using System.Text.RegularExpressions;
 using BibleDotComScraper.Classes;
-using BibleDotComScraper.Enums;
-using BibleDotComScraper.Services;
 using Spectre.Console;
 using System.Text.Json;
 using BibleDotComScraper.Classes.BibleCom;
+using BibleDotComScraper.Services;
+using System.IO.Compression;
 
-namespace BibleDotComScraper
+namespace BibleDotComScraper;
+
+internal static class Program
 {
-    internal static class Program
+    private static readonly HttpService Http = new();
+
+    static async Task Main()
     {
-        private static readonly HttpService Http = new HttpService();
-        private static BibleService _bible;
+        Console.OutputEncoding = Encoding.UTF8;
+        Console.InputEncoding = Encoding.UTF8;
+        AnsiConsole.MarkupLine("[underline red]bible.com[/] download");
 
-        static List<Language> languages = new();
-        static List<Translation> translations = new();
+        // Get the language that we're going to retrieve.
+        int overwriteLine = Console.CursorTop;
+        List<Language> languages = GetLanguages();
+        Language language = GetLanguage(languages);
+        EraseToLineAndPrintStatus(overwriteLine, 
+            $"[green]{language.Name}[/] selected.");
 
-        static Translation? desiredTranslation;
+        // Get the translation that we're going to retrieve.
+        overwriteLine = Console.CursorTop;
+        List<Translation> translations = GetTranslations(language);
+        Translation translation = GetTranslation(translations);
+        EraseToLineAndPrintStatus(overwriteLine,
+            $"[green]{translation.Name}[/] selected.");
 
-        static void Main2()
-        {
+        // Download the content.
+        overwriteLine = Console.CursorTop;
+        string tempFile = await DownloadOfflineTranslation(translation);
+        EraseToLineAndPrintStatus(overwriteLine,
+            $"Downloaded [green]{translation.Name}[/] from [red link]http:{translation.Url}[/] to [red link]file://{tempFile}[/].");
 
-            Console.WriteLine("bible.com scraper\n-=≡=-=≡=-=≡=-=≡=-\n\n");
+        // Extract and decode source files
+        overwriteLine = Console.CursorTop;
+        string tempPath = await ExtractAndDecodeFiles(tempFile);
+        EraseToLineAndPrintStatus(overwriteLine,
+            $"Extracted and Decoded [green]{translation.Name}[/] to [red link]file://{tempPath}[/].");
 
-            // get a language code
-            string langPage = string.Empty;
-            while (string.IsNullOrWhiteSpace(langPage))
+        // Delete the temporary file
+        File.Delete(tempFile);
+
+        // Get the meta data from Bible.com for this archive
+
+        // Parse the files and build the data
+
+    }
+
+    private static async Task<string> ExtractAndDecodeFiles(string tempFile)
+    {
+        using ZipArchive archive = ZipFile.OpenRead(tempFile);
+        string tempPath = GetTemporaryDirectory();
+
+        uint filesInArchive = (uint)archive.Entries.Count;
+
+        await AnsiConsole.Progress()
+            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn(), new SpinnerColumn())
+            .StartAsync(async ctx =>
             {
-                Console.Write("Enter iso language code [eng]: ");
-                Console.ForegroundColor = ConsoleColor.White;
-                var languageCode = Console.ReadLine();
-                if (string.IsNullOrWhiteSpace(languageCode)) languageCode = "eng";
-                languageCode = languageCode.ToLower();
+                ProgressTask task1 = ctx.AddTask("Extracting/Decoding", true, filesInArchive);
+                int i = 0;
 
-                try
+                foreach (ZipArchiveEntry entry in archive.Entries)
                 {
-                    langPage = Http.GetPage($"https://www.bible.com/languages/{languageCode}");
+                    i++;
+                    task1.Value= i;
+
+                    await using Stream stream = entry.Open();
+                    int bytesToRead = (int)entry.Length;
+                    byte[] buffer = new byte[bytesToRead];  
+                    _ = await stream.ReadAsync(buffer.AsMemory(0, bytesToRead));
+                    string decodedContent = DecodeYves(buffer);
+
+                    // get the path from the archive entry
+                    string entryPath = entry.FullName.Split('/')[0];
+                    string extractPath = Path.Combine(tempPath, entryPath);
+                    Directory.CreateDirectory(extractPath);
+                    string fileName = entry.FullName.Split('/')[1].Replace("yves", "html");
+                    string fullPath = Path.Combine(extractPath, fileName);
+                    await File.WriteAllTextAsync(fullPath, decodedContent);
                 }
-                catch (Exception e)
-                {
-                    Console.WriteLine("Language is unsupported or incorrect, or something else went terribly wrong.");
-                }
-            }
+            });
 
-            // get a translation
-            Console.WriteLine("Possible translations: ");
+        return tempPath;
 
-            Regex translationsReg =
-                new Regex(
-                    "<a role=button target=_self class=\"db pb2 lh-copy yv-green link\" href=(?<url>\\/versions\\/(?<slug>(?<code>\\d*)-.*?))>(?<name>.*?)<\\/a>");
-            MatchCollection results = translationsReg.Matches(langPage);
-            foreach (Match m in results)
-            {
-                Console.ForegroundColor = ConsoleColor.White;
-                Console.Write(m.Groups["code"].ToString());
-                Console.ForegroundColor = ConsoleColor.Gray;
-                Console.WriteLine($"\t: {m.Groups["name"]}");
-            }
-
-            string startingPageContent = string.Empty;
-            string translationCode = string.Empty;
-            while (string.IsNullOrWhiteSpace(startingPageContent))
-            {
-                Console.Write("Enter translation code [114]: ");
-                Console.ForegroundColor = ConsoleColor.White;
-                translationCode = Console.ReadLine();
-                if (string.IsNullOrWhiteSpace(translationCode)) translationCode = "114";
-                translationCode = translationCode.ToLower();
-
-                try
-                {
-                    string startingUrl = "https://www.bible.com" + results
-                        .FirstOrDefault(f => f.Groups["code"].ToString() == translationCode)
-                        ?.Groups["url"];
-
-                    startingPageContent = Http.GetPage(startingUrl);
-
-                }
-                catch
-                {
-                    Console.WriteLine(
-                        "Translation code is unsupported or incorrect, or something else went terribly wrong.");
-                }
-            }
-
-            // from the startingPageContent, we need to get the link to the first verse of the Bible.
-            string firstChapterUrl = "https://www.bible.com" + Regex
-                .Match(startingPageContent,
-                    "<a class=\"db pb3 link yv-green lh-copy\" role=button href=(?<firstChapterUrl>\\/bible\\/.*?)>Read Version")
-                .Groups["firstChapterUrl"].Value;
-
-            // we need to collate the Bible Metadata
-            string bibleName = results
-                .FirstOrDefault(f => f.Groups["code"].ToString() == translationCode)
-                ?.Groups["name"].ToString();
-            string bibleCode = Regex.Match(firstChapterUrl, ".*\\.(.+?)$").Groups[1].Value;
-
-            _bible = new BibleService(bibleCode, bibleName, uint.Parse(translationCode));
-
-            try
-            {
-                if (_bible.DatabaseExists)
-                {
-                    Console.Write("Bible DB already exists.  RESET or RESUME [resume]: ");
-                    if (Console.ReadLine()?.ToUpper().Trim() == "RESET")
-                    {
-                        _bible.DeleteDatabase();
-                    }
-                }
-            }
-            catch
-            {
-                Console.WriteLine($"can't delete existing file {bibleCode}.bible.db.  Quitting...");
-                return;
-            }
-
-            _bible.InitializeDatabase();
-
-            // pull a job from the queue and process.  Then wait a random number of seconds.
-            bool done = false;
-            while (!done)
-            {
-
-                Console.WriteLine($"Jobs remaining: {_bible.JobsRemaining}");
-
-                Job job = _bible.GetRandomJob();
-
-                Console.WriteLine($"Got job {job.Id} which is an {job.Type} job");
-                switch (job.Type)
-                {
-                    case JobTypes.EnumerateBooks:
-                        EnumerateBooks(job);
-                        break;
-                    case JobTypes.EnumerateChapters:
-                        EnumerateChapters(job);
-                        break;
-                    case JobTypes.EnumerateVerses:
-                        EnumerateVerses(job);
-                        break;
-                    default:
-                        throw new InvalidOperationException("Unknown job type");
-                }
-
-                _bible.DeleteJob(job);
-                done = (_bible.JobsRemaining == 0);
-
-                Console.WriteLine("Job finished");
-                //Console.ReadKey();
-            }
-
-            Console.WriteLine("All Done");
-            Console.ReadKey();
-
-        }
-
-
-        private static void EnumerateBooks(Job job)
-        {
-            uint i = 0;
-            string bookPage = Http.GetPage(job.Url);
-            Regex booksRegex = new Regex("\"human\":\"(?<name>.*?)\",\"usfm\":\"(?<abbr>.*?)\"");
-            MatchCollection booksMatches = booksRegex.Matches(bookPage);
-            foreach (Match m in booksMatches)
-            {
-                Book newBook = new Book(i, m.Groups["name"].Value, m.Groups["abbr"].Value);
-                _bible.AddBook(newBook);
-                _bible.CreateJob(JobTypes.EnumerateChapters,
-                    $"https://www.bible.com/json/bible/books/{_bible.TranslationCode}/{newBook.Code}/chapters");
-
-                i++;
-            }
-        }
-
-        private static void EnumerateChapters(Job job)
-        {
-
-            // extract the book code from the Url
-            string bookCode = Regex.Match(job.Url, "\\d+\\/(?<code>.*?)\\/").Groups["code"].Value;
-
-            uint i = 0;
-            string chaptersPage = Http.GetPage(job.Url);
-            Regex chapterRegex = new Regex("\"human\":\"(?<name>.*?)\",\"usfm\":\"(?<url>.*?)\"");
-            MatchCollection chaptersMatches = chapterRegex.Matches(chaptersPage);
-            foreach (Match m in chaptersMatches)
-            {
-                string chapterUrl = m.Groups["url"].Value;
-                Chapter newChapter = new Chapter(bookCode, i, m.Groups["name"].Value);
-                _bible.AddChapter(newChapter);
-                _bible.CreateJob(JobTypes.EnumerateVerses,
-                    $"https://www.bible.com/bible/{_bible.TranslationCode}/{chapterUrl}.{_bible.BibleCode}");
-                i++;
-            }
-        }
-
-        private static void EnumerateVerses(Job job)
-        {
-
-            // extract the book code from the Url
-            string bookCode = Regex.Match(job.Url, "\\d+\\/(?<book>[A-Z0-9]+)\\.(?<chapter>.*)\\.").Groups["book"]
-                .Value;
-            // extract the chapter number from the url
-            string chapterCode = Regex.Match(job.Url, "\\d+\\/(?<book>[A-Z0-9]+)\\.(?<chapter>.*)\\.").Groups["chapter"]
-                .Value;
-
-            // retrieve the Page
-            string chapterPage = Http.GetPage(job.Url);
-            Regex divRegex = new Regex("<div class=\\\"(d|p|s|q1|q2)\\\">.*?<\\/div>");
-            MatchCollection divMatches = divRegex.Matches(chapterPage);
-
-            // setup for the iteration
-            uint currentVerse = 0;
-
-            // there are 176 verses in Psalm 199, which is the longest chapter in the Bible.
-            Verse[] verseList = InitializeArray<Verse>(176);
-
-            foreach (Match m in divMatches)
-            {
-                // if the match is a class="s", then it's a section header for the _next_ verse
-                // in the match is a class="p", then it's a verse text. May contain a span "qs" that's a verse footer (selah)
-                // if the match is a class="d", then it's a verse prefix for the _next_ verse.
-                // if the match is a class="q1, q2", then it's a verse text, where there's multiline-formatting. If it's a section with one
-                //   these, we'll assume q1 starts a paragraph, and that paragraph ends a) with the next q1, or b) the next p. So when
-                //   a p or q1 starts, set the previous verse EndsParagraph to true, (unless we're on the first verse).
-
-                if (m.Value.Contains("class=\"s\""))
-                {
-
-                    string sectionHeader = m.Value
-                        .Replace("&#8217;", "'")
-                        .Replace("&#8220;", "“")
-                        .Replace("&#8221;", "”")
-                        .Replace("&#8212;", "—");
-
-
-                    // strip out any heading tags
-                    while (Regex.IsMatch(sectionHeader, "<span class=\"heading\">.*?<\\/span>"))
-                    {
-                        Match spanM = Regex.Match(sectionHeader, "<span class=\\\"heading\\\">(?<text>.*?)<\\/span>");
-                        sectionHeader = sectionHeader.Replace(spanM.Value, spanM.Groups["text"].Value);
-                    }
-
-                    // strip out div tags
-                    sectionHeader = Regex.Replace(sectionHeader, "<\\/div>", "");
-                    sectionHeader = Regex.Replace(sectionHeader, "<div class=\\\"s\\\">", "");
-
-                    // strip label from notes span from string
-                    sectionHeader = sectionHeader.Replace("<span class=\"label\">#</span>", "");
-
-
-                    // strip any body spans
-                    sectionHeader = Regex.Replace(sectionHeader, "<span class=\\\" {0,1}body\\\">.*?<\\/span>", "");
-
-
-                    // strip out notes spans
-                    sectionHeader = Regex.Replace(sectionHeader, "<span class=\"note.*?<\\/span>", "");
-
-
-                    // fix small caps.  Right now they'll look like this: 
-                    // <span class="sc">Lord</span>
-                    while (Regex.IsMatch(sectionHeader, "class=\"sc\""))
-                    {
-                        Match spanM = Regex.Match(sectionHeader, "<span class=\\\"sc\\\">(?<text>.*?)<\\/span>");
-                        string innerText = spanM.Groups["text"].Value
-                            .Replace("a", "ᴀ")
-                            .Replace("b", "ʙ")
-                            .Replace("c", "ᴄ")
-                            .Replace("d", "ᴅ")
-                            .Replace("e", "ᴇ")
-                            .Replace("f", "ꜰ")
-                            .Replace("g", "ɢ")
-                            .Replace("h", "ʜ")
-                            .Replace("i", "ɪ")
-                            .Replace("j", "ᴊ")
-                            .Replace("k", "ᴋ")
-                            .Replace("l", "ʟ")
-                            .Replace("m", "ᴍ")
-                            .Replace("n", "ɴ")
-                            .Replace("o", "ᴏ")
-                            .Replace("p", "ᴘ")
-                            .Replace("q", "ǫ")
-                            .Replace("r", "ʀ")
-                            .Replace("s", "s")
-                            .Replace("t", "ᴛ")
-                            .Replace("u", "ᴜ")
-                            .Replace("v", "ᴠ")
-                            .Replace("w", "ᴡ")
-                            .Replace("x", "x")
-                            .Replace("y", "ʏ")
-                            .Replace("z", "ᴢ");
-                        sectionHeader = sectionHeader.Replace(spanM.Value, innerText);
-                    }
-
-                    sectionHeader = sectionHeader.Replace(" &#160; ", " ").Trim();
-
-                    if (!string.IsNullOrWhiteSpace(sectionHeader))
-                    {
-                        verseList[currentVerse].SectionTitle = sectionHeader;
-                    }
-
-
-
-
-                }
-                else if (m.Value.Contains("class=\"d\""))
-                {
-                    string versePrefix = m.Value
-                        .Replace("&#8217;", "'")
-                        .Replace("&#8220;", "“")
-                        .Replace("&#8221;", "”")
-                        .Replace("&#8212;", "—");
-
-                    // strip label from notes span from string
-                    versePrefix = versePrefix.Replace("<span class=\"label\">#</span>", "");
-
-                    // strip any body spans
-                    versePrefix = Regex.Replace(versePrefix, "<span class=\\\" {0,1}body\\\">.*?<\\/span>", "");
-
-                    // strip out notes spans
-                    versePrefix = Regex.Replace(versePrefix, "<span class=\"note.*?<\\/span>", "");
-
-                    // strip out div tags
-                    versePrefix = Regex.Replace(versePrefix, "<\\/div>", "");
-                    versePrefix = Regex.Replace(versePrefix, "<div class=\\\"d\\\">", "");
-
-                    // strip out any content tags
-                    while (Regex.IsMatch(versePrefix, "<span class=\"content\">.*?<\\/span>"))
-                    {
-                        Match spanM = Regex.Match(versePrefix, "<span class=\\\"content\\\">(?<content>.*?)<\\/span>");
-                        versePrefix = versePrefix.Replace(spanM.Value, spanM.Groups["content"].Value);
-                    }
-
-                    // replace any italics tags
-                    versePrefix = versePrefix.Replace("<span class=\"it\">", "<i>");
-                    versePrefix = versePrefix.Replace("</span>", "</i>");
-
-                    // strip out any double spaces
-                    while (versePrefix.Contains("  "))
-                    {
-                        versePrefix = versePrefix.Replace("  ", " ");
-                    }
-
-                    // fix small caps.  Right now they'll look like this: 
-                    // <span class="sc">Lord</i>
-                    while (Regex.IsMatch(versePrefix, "class=\"sc\""))
-                    {
-                        Match spanM = Regex.Match(versePrefix, "<span class=\\\"sc\\\">(?<text>.*?)<\\/i>");
-                        string innerText = spanM.Groups["text"].Value
-                            .Replace("a", "ᴀ")
-                            .Replace("b", "ʙ")
-                            .Replace("c", "ᴄ")
-                            .Replace("d", "ᴅ")
-                            .Replace("e", "ᴇ")
-                            .Replace("f", "ꜰ")
-                            .Replace("g", "ɢ")
-                            .Replace("h", "ʜ")
-                            .Replace("i", "ɪ")
-                            .Replace("j", "ᴊ")
-                            .Replace("k", "ᴋ")
-                            .Replace("l", "ʟ")
-                            .Replace("m", "ᴍ")
-                            .Replace("n", "ɴ")
-                            .Replace("o", "ᴏ")
-                            .Replace("p", "ᴘ")
-                            .Replace("q", "ǫ")
-                            .Replace("r", "ʀ")
-                            .Replace("s", "s")
-                            .Replace("t", "ᴛ")
-                            .Replace("u", "ᴜ")
-                            .Replace("v", "ᴠ")
-                            .Replace("w", "ᴡ")
-                            .Replace("x", "x")
-                            .Replace("y", "ʏ")
-                            .Replace("z", "ᴢ");
-                        versePrefix = versePrefix.Replace(spanM.Value, innerText);
-                    }
-
-                    // strip out any doubled-up italics tags
-                    versePrefix = versePrefix.Replace("</i> <i>", " ");
-
-                    // finally, trim the strings
-                    versePrefix = versePrefix.Trim();
-
-                    verseList[currentVerse].VersePrefix = versePrefix;
-
-                }
-                else if (m.Value.Contains("class=\"p\""))
-                {
-
-                    // let's handle the verse suffix's first
-                    if (m.Value.Contains("class=\"qs\""))
-                    {
-                        // it's a verse suffix
-                        Regex verseSuffixRegex = new Regex("verse v(?<verse>\\d{0,3})\".*tent\\\">(?<text>.*?)<");
-                        Match m2 = verseSuffixRegex.Match(m.Value);
-                        verseList[uint.Parse(m2.Groups["verse"].Value) - 1].VerseSuffix = m2.Groups["text"].Value;
-                    }
-                    else
-                    {
-
-                        // it's a regular verse paragraph.
-
-                        // let's start by scrubbing the easy stuff
-                        string paragraph = m.Value
-                            .Replace("&#8217;", "’")
-                            .Replace("&#8216;", "‘")
-                            .Replace("&#8220;", "“")
-                            .Replace("&#8221;", "”")
-                            .Replace("&#8212;", "—")
-                            .Replace("&#8211;", "–")
-                            .Replace("&#274;", "E")                     /// fix for bible.org making Enosh into Ē'nosh
-                            .Replace("&#180;", "")                      /// fix for bible.org making Enosh into Ē'nosh
-                            .Replace("&#233;", "é")
-                                          ;
-
-                        // strip out div tags
-                        paragraph = Regex.Replace(paragraph, "<\\/div>", "");
-                        paragraph = Regex.Replace(paragraph, "<div class=\\\"p\\\">", "");
-
-                        // strip label from notes span from string
-                        paragraph = paragraph.Replace("<span class=\"label\">#</span>", "");
-
-
-                        // strip any body spans
-                        paragraph = Regex.Replace(paragraph, "<span class=\\\" {0,1}body\\\">.*?<\\/span>", "");
-
-
-                        // strip out notes spans
-                        paragraph = Regex.Replace(paragraph, "<span class=\"note.*?<\\/span>", "");
-
-                        // strip out the verse labels
-                        paragraph = Regex.Replace(paragraph, "<span class=\"label\">\\d+<\\/span>", "");
-
-                        // strip out any content tags
-                        while (Regex.IsMatch(paragraph, "<span class=\"content\">.*?<\\/span>"))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"content\\\">(?<content>.*?)<\\/span>");
-                            paragraph = paragraph.Replace(spanM.Value, spanM.Groups["content"].Value);
-                        }
-
-                        // strip out any bold spans 
-                        while (Regex.IsMatch(paragraph, "<span class=\"bd\">.*?<\\/span>"))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"bd\\\">(?<content>.*?)<\\/span>");
-                            paragraph = paragraph.Replace(spanM.Value, spanM.Groups["content"].Value);
-                        }
-
-                        // fix small caps.  Right now they'll look like this: 
-                        // <span class="sc">Lord</i>
-                        while (Regex.IsMatch(paragraph, "class=\"sc\""))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"sc\\\">(?<text>.*?)<\\/span>");
-                            string innerText = spanM.Groups["text"].Value
-                                .Replace("a", "ᴀ")
-                                .Replace("b", "ʙ")
-                                .Replace("c", "ᴄ")
-                                .Replace("d", "ᴅ")
-                                .Replace("e", "ᴇ")
-                                .Replace("f", "ꜰ")
-                                .Replace("g", "ɢ")
-                                .Replace("h", "ʜ")
-                                .Replace("i", "ɪ")
-                                .Replace("j", "ᴊ")
-                                .Replace("k", "ᴋ")
-                                .Replace("l", "ʟ")
-                                .Replace("m", "ᴍ")
-                                .Replace("n", "ɴ")
-                                .Replace("o", "ᴏ")
-                                .Replace("p", "ᴘ")
-                                .Replace("q", "ǫ")
-                                .Replace("r", "ʀ")
-                                .Replace("s", "s")
-                                .Replace("t", "ᴛ")
-                                .Replace("u", "ᴜ")
-                                .Replace("v", "ᴠ")
-                                .Replace("w", "ᴡ")
-                                .Replace("x", "x")
-                                .Replace("y", "ʏ")
-                                .Replace("z", "ᴢ");
-                            paragraph = paragraph.Replace(spanM.Value, innerText);
-                        }
-
-                        // convert italics tags
-                        while (Regex.IsMatch(paragraph,
-                            "(?<pretext>.*?)<span class=\\\"it\\\">(?<italicsText>.*?)<\\/span>(?<posttext>.*)"))
-                        {
-                            Regex ItalicsRegex =
-                                new Regex(
-                                    "(?<pretext>.*?)<span class=\"it\">(?<italicsText>.*?)<\\/span>(?<posttext>.*)");
-                            Match m2 = ItalicsRegex.Match(paragraph);
-                            paragraph = m2.Groups["pretext"] + "<i>" + m2.Groups["italicsText"] + "</i>" +
-                                        m2.Groups["posttext"];
-                        }
-
-                        // convert words of Jesus to red. This needs to happen after italics.
-                        while (Regex.IsMatch(paragraph, "<span class=\"wj\">.*?<\\/span>"))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"wj\\\">(?<content>.*?)<\\/span>");
-                            string innerText = spanM.Groups["content"].Value;
-                            paragraph = paragraph.Replace(spanM.Value, $"<font color=red>{innerText}</font>");
-                        }
-
-                        // strip out any double spaces
-                        while (paragraph.Contains("  "))
-                        {
-                            paragraph = paragraph.Replace("  ", " ");
-                        }
-
-                        // strip out any doubled-up italics tags
-                        paragraph = paragraph.Replace("</i> <i>", " ");
-
-                        // strip out any doubled-up red-letter tags
-                        paragraph = paragraph.Replace("</font><font color=red>", "")
-                            .Replace("</font> <font color=red>", " ");
-
-
-                        // now, for each span that is left, extract the verse, and the text, and slap it into the array.
-                        bool firstVerseInParagraph = true;
-                        Regex versesRegex = new Regex("<span class=\"verse v(?<verseNumber>\\d{1,3})\".*?>(?<text>.*?)<\\/span>");
-                        MatchCollection verseMatches = versesRegex.Matches(paragraph);
-                        foreach (Match v in verseMatches)
-                        {
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].Book = bookCode;
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].ChapterName = chapterCode;
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseNumber =
-                                uint.Parse(v.Groups["verseNumber"].Value);
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseText = v.Groups["text"].Value;
-                            if (firstVerseInParagraph)
-                            {
-                                verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].StartsParagraph = true;
-                                if (uint.Parse(v.Groups["verseNumber"].Value) > 1)
-                                {
-                                    verseList[uint.Parse(v.Groups["verseNumber"].Value) - 2].EndsParagraph = true;
-                                }
-                            }
-                            firstVerseInParagraph = false;
-                        }
-                    }
-                }
-                else if (m.Value.Contains("class=\"q"))
-                {
-
-                    // let's handle the verse suffix's first
-                    if (m.Value.Contains("class=\"qs\""))
-                    {
-                        // it's a verse suffix
-                        Regex verseSuffixRegex = new Regex("verse v(?<verse>\\d{0,3})\".*tent\\\">(?<text>.*?)<");
-                        Match m2 = verseSuffixRegex.Match(m.Value);
-                        verseList[uint.Parse(m2.Groups["verse"].Value) - 1].VerseSuffix = m2.Groups["text"].Value;
-                    }
-                    else
-                    {
-
-                        // it's a multiline verse. Save whether it's a q1 or a q2
-                        string multilineType = m.Value.Contains("q1") ? "q1" : "q2";
-
-                        // let's start by scrubbing the easy stuff
-                        string paragraph = m.Value
-                            .Replace("&#8217;", "’")
-                            .Replace("&#8216;", "‘")
-                            .Replace("&#8220;", "“")
-                            .Replace("&#8221;", "”")
-                            .Replace("&#8212;", "—")
-                            .Replace("&#8211;", "–")
-                            .Replace("&#274;", "E")                     /// fix for bible.org making Enosh into Ē'nosh
-                            .Replace("&#180;", " ")                     /// fix for bible.org making Enosh into Ē'nosh
-                            .Replace("&#233;", "é")
-                                          ;
-
-                        // strip out div tags
-                        paragraph = Regex.Replace(paragraph, "<\\/div>", "");
-                        paragraph = Regex.Replace(paragraph, "<div class=\\\"q1\\\">", "");
-                        paragraph = Regex.Replace(paragraph, "<div class=\\\"q2\\\">", "");
-
-                        // strip label from notes span from string
-                        paragraph = paragraph.Replace("<span class=\"label\">#</span>", "");
-
-
-                        // strip any body spans
-                        paragraph = Regex.Replace(paragraph, "<span class=\\\" {0,1}body\\\">.*?<\\/span>", "");
-
-
-                        // strip out notes spans
-                        paragraph = Regex.Replace(paragraph, "<span class=\"note.*?<\\/span>", "");
-
-                        // strip out the verse labels
-                        paragraph = Regex.Replace(paragraph, "<span class=\"label\">\\d+<\\/span>", "");
-
-                        // strip out any content tags
-                        while (Regex.IsMatch(paragraph, "<span class=\"content\">.*?<\\/span>"))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"content\\\">(?<content>.*?)<\\/span>");
-                            paragraph = paragraph.Replace(spanM.Value, spanM.Groups["content"].Value);
-                        }
-
-                        // fix small caps.  Right now they'll look like this: 
-                        // <span class="sc">Lord</i>
-                        while (Regex.IsMatch(paragraph, "class=\"sc\""))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"sc\\\">(?<text>.*?)<\\/span>");
-                            string innerText = spanM.Groups["text"].Value
-                                .Replace("a", "ᴀ")
-                                .Replace("b", "ʙ")
-                                .Replace("c", "ᴄ")
-                                .Replace("d", "ᴅ")
-                                .Replace("e", "ᴇ")
-                                .Replace("f", "ꜰ")
-                                .Replace("g", "ɢ")
-                                .Replace("h", "ʜ")
-                                .Replace("i", "ɪ")
-                                .Replace("j", "ᴊ")
-                                .Replace("k", "ᴋ")
-                                .Replace("l", "ʟ")
-                                .Replace("m", "ᴍ")
-                                .Replace("n", "ɴ")
-                                .Replace("o", "ᴏ")
-                                .Replace("p", "ᴘ")
-                                .Replace("q", "ǫ")
-                                .Replace("r", "ʀ")
-                                .Replace("s", "s")
-                                .Replace("t", "ᴛ")
-                                .Replace("u", "ᴜ")
-                                .Replace("v", "ᴠ")
-                                .Replace("w", "ᴡ")
-                                .Replace("x", "x")
-                                .Replace("y", "ʏ")
-                                .Replace("z", "ᴢ");
-                            paragraph = paragraph.Replace(spanM.Value, innerText);
-                        }
-
-                        // convert italics tags
-                        while (Regex.IsMatch(paragraph,
-                            "(?<pretext>.*?)<span class=\\\"it\\\">(?<italicsText>.*?)<\\/span>(?<posttext>.*)"))
-                        {
-                            Regex ItalicsRegex =
-                                new Regex(
-                                    "(?<pretext>.*?)<span class=\"it\">(?<italicsText>.*?)<\\/span>(?<posttext>.*)");
-                            Match m2 = ItalicsRegex.Match(paragraph);
-                            paragraph = m2.Groups["pretext"] + "<i>" + m2.Groups["italicsText"] + "</i>" +
-                                        m2.Groups["posttext"];
-                        }
-
-                        // convert words of Jesus to red. This needs to happen after italics.
-                        while (Regex.IsMatch(paragraph, "<span class=\"wj\">.*?<\\/span>"))
-                        {
-                            Match spanM = Regex.Match(paragraph, "<span class=\\\"wj\\\">(?<content>.*?)<\\/span>");
-                            string innerText = spanM.Groups["content"].Value;
-                            paragraph = paragraph.Replace(spanM.Value, $"<font color=red>{innerText}</font>");
-                        }
-
-                        // strip out any double spaces
-                        while (paragraph.Contains("  "))
-                        {
-                            paragraph = paragraph.Replace("  ", " ");
-                        }
-
-                        // strip out any doubled-up italics tags
-                        paragraph = paragraph.Replace("</i> <i>", " ");
-
-                        // strip out any doubled-up red-letter tags
-                        paragraph = paragraph.Replace("</font><font color=red>", "")
-                            .Replace("</font> <font color=red>", " ");
-
-
-                        // now, for each span that is left, extract the verse, and the text, and slap it into the array.
-                        bool firstVerseInParagraph = multilineType == "q1";
-                        Regex versesRegex = new Regex("<span class=\"verse v(?<verseNumber>\\d{1,3})\".*?>(?<text>.*?)<\\/span>");
-                        MatchCollection verseMatches = versesRegex.Matches(paragraph);
-                        foreach (Match v in verseMatches)
-                        {
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].Book = bookCode;
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].ChapterName = chapterCode;
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseNumber =
-                                uint.Parse(v.Groups["verseNumber"].Value);
-
-                            verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseText =
-                                verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseText +
-                                (multilineType == "q1" && verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].VerseText == string.Empty ? string.Empty : "<br />") +
-                                v.Groups["text"].Value;
-
-                            if (firstVerseInParagraph)
-                            {
-                                verseList[uint.Parse(v.Groups["verseNumber"].Value) - 1].StartsParagraph = true;
-                                if (uint.Parse(v.Groups["verseNumber"].Value) > 1)
-                                {
-                                    verseList[uint.Parse(v.Groups["verseNumber"].Value) - 2].EndsParagraph = true;
-                                }
-                            }
-                        }
-                    }
-                }
-
-            }
-
-            foreach (Verse v in verseList.Where(f => f.VerseNumber != 0))
-            {
-                _bible.AddVerse(v);
-            }
-
-        }
-
-        static T[] InitializeArray<T>(int length) where T : new()
-        {
-            T[] array = new T[length];
-            for (int i = 0; i < length; ++i)
-            {
-                array[i] = new T();
-            }
-
-            return array;
-        }
-
-        static void Main()
-        {
-            Console.OutputEncoding = Encoding.UTF8;
-            Console.InputEncoding = Encoding.UTF8;
-            AnsiConsole.MarkupLine("[underline red]bible.com[/] downloader");
-
-            AnsiConsole.Status()
-                .Start("Retrieving available languages ...", ctx =>
-                {
-                    string languageHtml = Http.GetPage("https://www.bible.com/api/bible/configuration", false);
-                    Languages? rawLanguages = JsonSerializer.Deserialize<Languages>(languageHtml);
-                    languages = rawLanguages!.response.data.default_versions.Select(c => new Language(c.name, c.language_tag, c.iso_639_3, c.local_name, c.total_versions)).ToList<Language>();
-                });
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"We found [green]{languages.Count()}[/] languages!");
-            AnsiConsole.WriteLine();
-
-            string? languageCode = GetLanguage();
-            if (string.IsNullOrWhiteSpace(languageCode)) { return; }
-
-            Language language = languages.Single(f => f.Iso639 == languageCode);
-
-            AnsiConsole.Status()
-                .Start($"Retrieving list of translations available for [green]{language.Name}[/]", ctx =>
-                {
-                    string translationHtml = Http.GetPage($"https://www.bible.com/api/bible/versions?language_tag={language.Iso639}&type=all", false);
-                    Translations? rawTranslations = JsonSerializer.Deserialize<Translations>(translationHtml);
-                    translations = rawTranslations!.response.data.versions.Select(f => new Translation(f.abbreviation, f.local_title, f.offline.url)).ToList<Translation>();
-                });
-
-            if (translations.Count() == 1)
-            {
-                desiredTranslation = translations.Single();
-            }
-            else
-            {
-                SelectionPrompt<string> selectionPrompt = new();
-                selectionPrompt.Title = "Which translation would you like to download?";
-                selectionPrompt.PageSize = 15;
-                selectionPrompt.MoreChoicesText = "[grey](Move up and down to reveal more translations)[/]";
-                foreach (Translation translation in translations)
-                {
-                    selectionPrompt.AddChoice($"[green]{translation.Code}[/]: {translation.Name}");
-                };
-                string b = AnsiConsole.Prompt(selectionPrompt)[7..];
-                string desiredTranslationCode = b[..b.IndexOf("[")];
-                desiredTranslation = translations.Single(f => f.Code == desiredTranslationCode);
-            }
-
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine($"Downloading [green]{desiredTranslation.Name}[/] from [red underline]http:{desiredTranslation.Url}[/]");
-            Thread.Sleep(5000);
-        }
-
-        public static string? GetLanguage()
-        {
-            bool done = false;
-            List<Language> possibleMatches = new();
-            while (!done)
-            {
-                string whatTheySaid = AnsiConsole.Ask<string>("What is the [green]language[/] you want to download?", "english").ToLower();
-
-                // we have a string. We want to see now how many possible matches that has
-                possibleMatches = languages.Where(f => f.Iso639.ToLower() == whatTheySaid)
-                    .Union(languages.Where(f => f.Name.ToLower().StartsWith(whatTheySaid)))
-                    .Union(languages.Where(f => f.LocalName.ToLower().StartsWith(whatTheySaid)))
-                    .OrderBy(f => f.Name)
-                    .ToList();
-
-                if (possibleMatches.Count() == 1) { return possibleMatches.Single().Iso639; }
-                if (possibleMatches.Any())
-                {
-                    done = true;
-                }
-                else
-                {
-                    AnsiConsole.MarkupLine("[red underline]Error:[/] We couldn't locate any languages that match that. Please try again!");
-                }
-            }
-
-            AnsiConsole.MarkupLine($"We found [green]{possibleMatches.Count()}[/] matches");
-
-            SelectionPrompt<string> selectionPrompt = new();
-            selectionPrompt.Title = "Which language would you like to download?";
-            selectionPrompt.PageSize = 15;
-            selectionPrompt.MoreChoicesText = "[grey](Move up and down to reveal more languages)[/]";
-            foreach (Language code in possibleMatches)
-            {
-                selectionPrompt.AddChoice($"[green]{code.Iso639}[/]: {code.Name} [red]({code.TranslationCount})[/]");
-            };
-            return AnsiConsole.Prompt(selectionPrompt)[7..10];
-        }
-
-        public static string ReadString(byte[] arrayOfByte)
+        static string DecodeYves(IReadOnlyList<byte> arrayOfByte)
         {
             int i = 0;
-            List<byte> byteArray = new List<byte>();
-            while (i < arrayOfByte.Length)
+            List<byte> byteArray = new();
+            while (i < arrayOfByte.Count)
             {
-                if (arrayOfByte.Length > i + 1)
+                if (arrayOfByte.Count > i + 1)
                 {
                     byteArray.Add((byte)(((0xFF & arrayOfByte[i + 1]) >> 5) | ((0xFF & arrayOfByte[i + 1]) << 3)));
                     byteArray.Add((byte)(((0xFF & arrayOfByte[i]) >> 5) | ((0xFF & arrayOfByte[i]) << 3)));
@@ -821,7 +107,172 @@ namespace BibleDotComScraper
                 }
                 i += 2;
             }
-            return Encoding.ASCII.GetString(byteArray.ToArray());
+            return Encoding.UTF8.GetString(byteArray.ToArray());
+        }
+
+        static string GetTemporaryDirectory()
+        {
+            string tempFolder = Path.GetTempFileName().Split('.')[0];
+            File.Delete(tempFolder);
+            Directory.CreateDirectory(tempFolder);
+
+            return tempFolder;
         }
     }
+   
+    private static void EraseToLineAndPrintStatus(int lineToRevertTo, string lineToPrint)
+    {
+        while (Console.CursorTop > lineToRevertTo+1)
+        {
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            ClearCurrentConsoleLine();
+        }
+
+        AnsiConsole.MarkupLine(lineToPrint);
+        return;
+
+        static void ClearCurrentConsoleLine()
+        {
+            int currentLineCursor = Console.CursorTop;
+            Console.SetCursorPosition(0, Console.CursorTop);
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.SetCursorPosition(0, currentLineCursor);
+        }
+    }
+
+    private static async Task<string> DownloadOfflineTranslation(Translation translation)
+    {
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"Downloading [green]{translation.Name}[/] from [red link]http:{translation.Url}[/]");
+
+        string temporaryFilePath = Path.GetTempFileName().Replace(".tmp", ".zip");
+
+        await AnsiConsole.Progress()
+            .Columns(new TaskDescriptionColumn(), new ProgressBarColumn(), new PercentageColumn(), new RemainingTimeColumn(), new SpinnerColumn())
+            .StartAsync(async ctx =>
+            {
+                await Http.Download(
+                    temporaryFilePath,
+                    ctx.AddTask(translation.Name, new ProgressTaskSettings()),
+                    "http:" + translation.Url);
+            });
+
+        return temporaryFilePath;
+    }
+
+    private static List<Translation> GetTranslations(Language language)
+    {
+
+        List<Translation>? result = null;
+        AnsiConsole.Status()
+            .Start($"Retrieving list of translations available for [green]{language.Name}[/]", _ =>
+            {
+                string translationHtml = Http.GetPage($"https://www.bible.com/api/bible/versions?language_tag={language.Code}&type=all");
+                Translations? rawTranslations = JsonSerializer.Deserialize<Translations>(translationHtml);
+                result = rawTranslations!.response.data.versions.Select(f => new Translation(f.abbreviation, f.local_title, f.offline.url)).ToList();
+            });
+
+        if (result == null)
+        {
+            throw new InvalidDataException("We couldn't get a list of translations available in that language.");
+        }
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"We retrieved [green]{result.Count}[/] translations available in [green]{language.Name}[/]!");
+        AnsiConsole.WriteLine();
+
+        return result;
+    }
+
+    private static Translation GetTranslation(List<Translation> translations)
+    {
+
+        if (translations.Count == 1) { return translations.First(); }
+
+        SelectionPrompt<string> selectionPrompt = new()
+        {
+            Title = "Which translation would you like to download?",
+            PageSize = 15,
+            MoreChoicesText = "[grey](Move up and down to reveal more translations)[/]"
+        };
+        foreach (Translation translation in translations)
+        {
+            selectionPrompt.AddChoice($"[green]{translation.Code}[/]: {translation.Name}");
+        }
+        string b = AnsiConsole.Prompt(selectionPrompt)[7..];
+        string desiredTranslationCode = b[..b.IndexOf('[', StringComparison.Ordinal)];
+        return translations.Single(f => f.Code == desiredTranslationCode);
+    }
+
+    private static List<Language> GetLanguages()
+    {
+        List<Language>? result = null;
+
+        AnsiConsole.Status()
+            .Start("Retrieving available languages ...", _ =>
+            {
+                string languageHtml = Http.GetPage("https://www.bible.com/api/bible/configuration");
+                Languages? rawLanguages = JsonSerializer.Deserialize<Languages>(languageHtml);
+                result = rawLanguages!.response.data.default_versions.Select(c =>
+                    new Language(c.name, c.language_tag, c.iso_639_3, c.local_name, c.total_versions)).ToList();
+            });
+        if (result == null)
+        {
+            throw new InvalidDataException("We couldn't get a list of languages.");
+        }
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"We found [green]{result.Count}[/] languages!");
+        AnsiConsole.WriteLine();
+
+        return result;
+    }
+
+    private static Language GetLanguage(List<Language> languages)
+    {
+        bool done = false;
+        List<Language> possibleMatches = new();
+        while (!done)
+        {
+            string whatTheySaid = AnsiConsole.Ask<string>("What is the [green]language[/] you want to download?", "english").ToLower();
+
+            // we have a string. We want to see now how many possible matches that has
+            possibleMatches = languages.Where(f => f.Iso639.Equals(whatTheySaid, StringComparison.CurrentCultureIgnoreCase))
+                .Union(languages.Where(f => f.Name.StartsWith(whatTheySaid, StringComparison.CurrentCultureIgnoreCase)))
+                .Union(languages.Where(f => f.LocalName.StartsWith(whatTheySaid, StringComparison.CurrentCultureIgnoreCase)))
+                .OrderBy(f => f.Name)
+                .ToList();
+
+            if (possibleMatches.Count == 1)
+            {
+                return possibleMatches.Single();
+            }
+            if (possibleMatches.Count != 0)
+            {
+                done = true;
+            }
+            else
+            {
+                AnsiConsole.MarkupLine("[red underline]Error:[/] We couldn't locate any languages that match that. Please try again!");
+            }
+        }
+
+        AnsiConsole.MarkupLine($"We found [green]{possibleMatches.Count}[/] matches");
+
+        SelectionPrompt<string> selectionPrompt = new()
+        {
+            Title = "Which language would you like to download?",
+            PageSize = 15,
+            MoreChoicesText = "[grey](Move up and down to reveal more languages)[/]"
+        };
+        foreach (Language code in possibleMatches)
+        {
+            selectionPrompt.AddChoice($"[green]{code.Code}[/]: {code.Name} [red]({code.TranslationCount})[/]");
+        }
+
+        string selection = AnsiConsole.Prompt(selectionPrompt);
+        selection = selection[7..(selection.IndexOf(':') - 3)];
+
+        return languages.Single(f => f.Code == selection);
+
+    }
+
 }

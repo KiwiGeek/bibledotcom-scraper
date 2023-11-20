@@ -2,16 +2,39 @@
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
-		<TargetFramework>net7.0</TargetFramework>
+		<TargetFramework>net8.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 	</PropertyGroup>
 
 	<ItemGroup>
+	  <Compile Remove="OldImplementation\BibleService.cs" />
+	  <Compile Remove="OldImplementation\Book.cs" />
+	  <Compile Remove="OldImplementation\Chapter.cs" />
+	  <Compile Remove="OldImplementation\HttpService.cs" />
+	  <Compile Remove="OldImplementation\Job.cs" />
+	  <Compile Remove="OldImplementation\JobTypes.cs" />
+	  <Compile Remove="OldImplementation\PageCacheService.cs" />
+	  <Compile Remove="OldImplementation\Verse.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Data.Sqlite" Version="7.0.10" />
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
 		<PackageReference Include="Spectre.Console" Version="0.47.0" />
+		<PackageReference Include="System.IO.Compression.ZipFile" Version="4.3.0" />
 		<PackageReference Include="System.Text.Json" Version="7.0.3" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="OldImplementation\BibleService.cs" />
+	  <None Include="OldImplementation\Book.cs" />
+	  <None Include="OldImplementation\Chapter.cs" />
+	  <None Include="Services\HttpService.cs" />
+	  <None Include="OldImplementation\Job.cs" />
+	  <None Include="OldImplementation\JobTypes.cs" />
+	  <None Include="Services\PageCacheService.cs" />
+	  <None Include="OldImplementation\Verse.cs" />
 	</ItemGroup>
 
 </Project>

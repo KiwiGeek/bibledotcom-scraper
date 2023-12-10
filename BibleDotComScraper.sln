@@ -3,7 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.7.34024.191
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BibleDotComScraper", "BibleDotComScraper.csproj", "{1116C8AA-DBD1-48FC-A906-BFEE4F0D18E9}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BibleDotComScraper", "BibleDotComScraper.csproj", "{1116C8AA-DBD1-48FC-A906-BFEE4F0D18E9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "libBibleDotCom", "libBibleCom\libBibleDotCom.csproj", "{022FBA27-6F56-42D7-ABA1-8718785B8A5D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LibBibleDotCom.Tests", "Tests\LibBibleDotCom.Tests.csproj", "{8F99CCA7-E12D-46E0-AEC6-26E0D2E89955}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +19,14 @@ Global
 		{1116C8AA-DBD1-48FC-A906-BFEE4F0D18E9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1116C8AA-DBD1-48FC-A906-BFEE4F0D18E9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1116C8AA-DBD1-48FC-A906-BFEE4F0D18E9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{022FBA27-6F56-42D7-ABA1-8718785B8A5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{022FBA27-6F56-42D7-ABA1-8718785B8A5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{022FBA27-6F56-42D7-ABA1-8718785B8A5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{022FBA27-6F56-42D7-ABA1-8718785B8A5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8F99CCA7-E12D-46E0-AEC6-26E0D2E89955}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8F99CCA7-E12D-46E0-AEC6-26E0D2E89955}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8F99CCA7-E12D-46E0-AEC6-26E0D2E89955}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8F99CCA7-E12D-46E0-AEC6-26E0D2E89955}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

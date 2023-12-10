@@ -5,6 +5,11 @@ using System.Text.Json;
 using BibleDotComScraper.Classes.BibleCom;
 using BibleDotComScraper.Services;
 using System.IO.Compression;
+using LibBibleDotCom.Models;
+using System.Security.Cryptography.X509Certificates;
+using static BibleDotComScraper.Classes.BibleCom.Translations;
+using LibBibleDotCom.CacheServices;
+using System;
 
 namespace BibleDotComScraper;
 
@@ -12,17 +17,84 @@ internal static class Program
 {
     private static readonly HttpService Http = new();
 
+    public class BallOData
+    {
+        public List<InfoLanguage> Languages { get; set; } = new();
+        public Dictionary<string, LibBibleDotCom.Models.Version> Versions { get; set; } = new();
+    }
+
     static async Task Main()
     {
+
+
+        LibBibleDotCom.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
+
+        //BallOData ballOData = new BallOData();
+        //List<InfoLanguage> languages = (await LibBibleDotCom.BibleDotComService.GetAllLanguages());
+        //ballOData.Languages = languages;
+        //for (int i = 0; i < languages.Count; i++)
+        //{
+        //    System.Diagnostics.Debug.WriteLine(i);
+        //    string languageCode = languages[i].Iso639_3;
+        //    List<LibBibleDotCom.Models.Version> versions = await LibBibleDotCom.BibleDotComService.GetVersions(languageCode);
+        //    foreach (LibBibleDotCom.Models.Version version in versions)
+        //    {
+        //        //if (ballOData.Versions.ContainsKey(version.LocalAbbreviation))
+        //        //{
+        //        //    Console.WriteLine($"Can't add {version.LocalAbbreviation}");
+        //        //} else
+        //        //{
+        //        ballOData.Versions.Add($"{languages[i].Tag}|{version.Id}", version);
+        //        //}
+        //    }
+        //}
+
+
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        string cachePath = Path.Combine(appData, "LibBibleDotCom");
+        FileSystemCache cache = new(cachePath);
+
+        //cache.SetCache("all", ballOData, TimeSpan.FromDays(100));
+
+        BallOData ballOData = cache.GetCached<BallOData>("all");
+        int i = 0;
+
+        static string GetFileNameFromUrl(string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri))
+                uri = new Uri(new Uri("http://canbeanything"), url);
+
+            return Path.GetFileName(uri.LocalPath);
+        }
+
+
+        foreach (LibBibleDotCom.Models.Version version in ballOData.Versions.Values)
+        {
+            i++;
+            Console.WriteLine($"{i}: {version.LocalAbbreviation}");
+            HttpClient httpClient = new();
+            await httpClient.GetByteArrayAsync(version.OfflineInfo.Url).ContinueWith(async (task) =>
+            {
+
+                byte[] bytes = await task;
+                string fileName = GetFileNameFromUrl(version.OfflineInfo.Url.ToString());
+                await File.WriteAllBytesAsync(Path.Combine(cachePath, fileName), bytes);
+            });
+        }
+
+        return;
+
+
         Console.OutputEncoding = Encoding.UTF8;
         Console.InputEncoding = Encoding.UTF8;
         AnsiConsole.MarkupLine("[underline red]bible.com[/] download");
 
         // Get the language that we're going to retrieve.
         int overwriteLine = Console.CursorTop;
-        List<Language> languages = GetLanguages();
-        Language language = GetLanguage(languages);
-        EraseToLineAndPrintStatus(overwriteLine, 
+        List<Classes.Language> languagesa = GetLanguages();
+        Classes.Language language = GetLanguage(languagesa);
+        EraseToLineAndPrintStatus(overwriteLine,
             $"[green]{language.Name}[/] selected.");
 
         // Get the translation that we're going to retrieve.
@@ -70,11 +142,11 @@ internal static class Program
                 foreach (ZipArchiveEntry entry in archive.Entries)
                 {
                     i++;
-                    task1.Value= i;
+                    task1.Value = i;
 
                     await using Stream stream = entry.Open();
                     int bytesToRead = (int)entry.Length;
-                    byte[] buffer = new byte[bytesToRead];  
+                    byte[] buffer = new byte[bytesToRead];
                     _ = await stream.ReadAsync(buffer.AsMemory(0, bytesToRead));
                     string decodedContent = DecodeYves(buffer);
 
@@ -119,10 +191,10 @@ internal static class Program
             return tempFolder;
         }
     }
-   
+
     private static void EraseToLineAndPrintStatus(int lineToRevertTo, string lineToPrint)
     {
-        while (Console.CursorTop > lineToRevertTo+1)
+        while (Console.CursorTop > lineToRevertTo + 1)
         {
             Console.SetCursorPosition(0, Console.CursorTop - 1);
             ClearCurrentConsoleLine();
@@ -160,7 +232,7 @@ internal static class Program
         return temporaryFilePath;
     }
 
-    private static List<Translation> GetTranslations(Language language)
+    private static List<Translation> GetTranslations(Classes.Language language)
     {
 
         List<Translation>? result = null;
@@ -203,9 +275,9 @@ internal static class Program
         return translations.Single(f => f.Code == desiredTranslationCode);
     }
 
-    private static List<Language> GetLanguages()
+    private static List<Classes.Language> GetLanguages()
     {
-        List<Language>? result = null;
+        List<Classes.Language>? result = null;
 
         AnsiConsole.Status()
             .Start("Retrieving available languages ...", _ =>
@@ -213,7 +285,7 @@ internal static class Program
                 string languageHtml = Http.GetPage("https://www.bible.com/api/bible/configuration");
                 Languages? rawLanguages = JsonSerializer.Deserialize<Languages>(languageHtml);
                 result = rawLanguages!.response.data.default_versions.Select(c =>
-                    new Language(c.name, c.language_tag, c.iso_639_3, c.local_name, c.total_versions)).ToList();
+                    new Classes.Language(c.name, c.language_tag, c.iso_639_3, c.local_name, c.total_versions)).ToList();
             });
         if (result == null)
         {
@@ -226,10 +298,10 @@ internal static class Program
         return result;
     }
 
-    private static Language GetLanguage(List<Language> languages)
+    private static Classes.Language GetLanguage(List<Classes.Language> languages)
     {
         bool done = false;
-        List<Language> possibleMatches = new();
+        List<Classes.Language> possibleMatches = new();
         while (!done)
         {
             string whatTheySaid = AnsiConsole.Ask<string>("What is the [green]language[/] you want to download?", "english").ToLower();
@@ -263,7 +335,7 @@ internal static class Program
             PageSize = 15,
             MoreChoicesText = "[grey](Move up and down to reveal more languages)[/]"
         };
-        foreach (Language code in possibleMatches)
+        foreach (Classes.Language code in possibleMatches)
         {
             selectionPrompt.AddChoice($"[green]{code.Code}[/]: {code.Name} [red]({code.TranslationCount})[/]");
         }

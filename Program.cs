@@ -28,7 +28,7 @@ internal static class Program
 
 
         bdc.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
-        var b = await bdc.BibleDotComService.GetDecodedVersion(114);
+        var b = await bdc.BibleDotComService.GetDecodedVersion("eng", "NKJV");
 
         return;
 

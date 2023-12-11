@@ -36,11 +36,11 @@ public static class BibleDotComService
         // Although it's not currently the case, it's plausible that at some point a language could be returned with no Id which has 
         // multiple translations. In that case, we'd need to pull down all the translations, and double-check them against the 
         // languagues list above to find the Id that's not used. This would probably never happen, but it's better to be safe than sorry.
-        
+
         List<BibleDotComLanguages.DefaultVersion> languagesWithMissingIds = rawLanguages.response.data.default_versions.Where(l => l.id == null).ToList();
         int i = 0;
         int size = languagesWithMissingIds.Count;
-        foreach (BibleDotComLanguages.DefaultVersion rawLanguage in rawLanguages.response.data.default_versions.Where(l => l.id == null))      
+        foreach (BibleDotComLanguages.DefaultVersion rawLanguage in rawLanguages.response.data.default_versions.Where(l => l.id == null))
         {
             List<Version> versions = await GetVersionsAsync(rawLanguage.language_tag);
             foreach (Version version in versions)
@@ -56,7 +56,7 @@ public static class BibleDotComService
             }
             i++;
             cancellationToken?.ThrowIfCancellationRequested();
-            progress?.Report((int)(50.0 + ((float)i/size*25.0)));
+            progress?.Report((int)(50.0 + ((float)i / size * 25.0)));
         }
 
         return rawLanguages.response.data.default_versions
@@ -300,8 +300,8 @@ public static class BibleDotComService
         string finalFilename = tempDestinationString + ".zip";
         string tempPath = Path.Combine(Path.GetTempPath(), tempDestinationString);
         Directory.CreateDirectory(tempPath);
-        
-        using ZipArchive zipSource = ZipFile.OpenRead(temporaryFileDestination);   
+
+        using ZipArchive zipSource = ZipFile.OpenRead(temporaryFileDestination);
         uint filesInArchive = (uint)zipSource.Entries.Count;
 
         foreach (ZipArchiveEntry entry in zipSource.Entries)
@@ -340,6 +340,10 @@ public static class BibleDotComService
         }
 
 
+        if (File.Exists(finalFileDestination))
+        {
+            File.Delete(finalFileDestination);
+        }
         ZipFile.CreateFromDirectory(tempPath, finalFileDestination);
         zipSource.Dispose();
         Directory.Delete(tempPath, true);
@@ -369,7 +373,23 @@ public static class BibleDotComService
         }
 
     }
-    
+
+    public static async Task<string> GetDecodedVersion(string languageTag, string translation, string? destinationFilePath = null, IProgress<int>? progress = null, CancellationToken? cancellationToken = null)
+    {
+        // pull down the translations of that language
+        List<Version> versions = await GetVersionsAsync(languageTag, progress, cancellationToken);
+        cancellationToken?.ThrowIfCancellationRequested();
+
+        // find the translation we're looking for
+        uint id = versions.FirstOrDefault(v => v.Abbreviation == translation
+                                            || v.LocalAbbreviation == translation
+                                            || v.LocalTitle == translation
+                                            || v.Title == translation)?.Id ?? throw new Exception("Translation not found");
+        cancellationToken?.ThrowIfCancellationRequested();
+
+        // get the translation
+        return await GetDecodedVersion((uint)id, null, destinationFilePath, progress, cancellationToken);
+    }
 
     // Extract text from translation
 

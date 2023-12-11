@@ -21,6 +21,12 @@ internal class SqliteCache : ICacheService
 
         command.CommandText = "CREATE TABLE IF NOT EXISTS Cache (id INTEGER PRIMARY KEY, key TEXT, [type] TEXT, value TEXT, expires DATETIME)";
         command.ExecuteNonQuery();
+        command.CommandText = "CREATE INDEX IF NOT EXISTS [Expire_Date] ON [Cache] ([Expires] ASC)";
+        command.ExecuteNonQuery();
+        command.CommandText = "CREATE INDEX IF NOT EXISTS [Type_and_Key] ON [Cache] ([Key] ASC, [Type] ASC)";
+        command.ExecuteNonQuery();
+        command.CommandText = "CREATE INDEX IF NOT EXISTS [Type] ON [Cache] ([Type] ASC)";
+        command.ExecuteNonQuery();
     }
 
 

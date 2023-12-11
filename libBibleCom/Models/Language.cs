@@ -1,4 +1,6 @@
-﻿namespace LibBibleDotCom.Models;
+﻿using System.Text.Json.Serialization;
+
+namespace LibBibleDotCom.Models;
 
 public abstract record LanguageBase
 {

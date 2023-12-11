@@ -47,4 +47,20 @@ internal static class HttpClientService
         _sqliteCacheService.SetCache(url, pageResult, cacheLifespan);
         return pageResult;
     }
+
+    public static async Task GetDownload(string destinationFile, Uri url)
+    {
+        using HttpClient client = new();
+        client.DefaultRequestHeaders.Add("X-Youversion-App-Platform", "web");
+        client.DefaultRequestHeaders.Add("X-Youversion-App-Version", "3");
+        client.DefaultRequestHeaders.Add("X-Youversion-App-Client", "youversion");
+        client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36 Edg/119.0.0.0");
+
+        using HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+        response.EnsureSuccessStatusCode();
+
+        using Stream contentStream = await response.Content.ReadAsStreamAsync();
+        await using FileStream fileStream = new(destinationFile, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
+        await contentStream.CopyToAsync(fileStream);
+    }
 }

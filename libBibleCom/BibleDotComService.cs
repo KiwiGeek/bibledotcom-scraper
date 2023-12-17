@@ -391,6 +391,11 @@ public static class BibleDotComService
         return await GetDecodedVersion((uint)id, null, destinationFilePath, progress, cancellationToken);
     }
 
+    public static async Task<Token> Tokenize(string input)
+    {
+        return new Token("root", string.Empty, input);
+    }
+
     // Extract text from translation
 
     // Get translation audio

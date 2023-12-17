@@ -16,4 +16,10 @@
 	  <PackageReference Include="System.Text.Json" Version="8.0.0" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Reference Include="OneOf">
+	    <HintPath>..\..\..\..\.nuget\oneof\3.0.263\lib\netstandard2.0\OneOf.dll</HintPath>
+	  </Reference>
+	</ItemGroup>
+
 </Project>

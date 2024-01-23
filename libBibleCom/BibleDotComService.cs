@@ -286,7 +286,7 @@ public static class BibleDotComService
         string stringToFind = $"/{id}-{maxRevision}.zip";
         string replacementString = $"/{id}-{revision}.zip";
         string adjustedUrl = unadjustedUrl.Replace(stringToFind, replacementString);
-        Uri translationUri = new Uri(adjustedUrl);
+        Uri translationUri = new (adjustedUrl);
         cancellationToken?.ThrowIfCancellationRequested();
 
         // pull down the translation
@@ -355,7 +355,7 @@ public static class BibleDotComService
         static string DecodeYves(IReadOnlyList<byte> arrayOfByte)
         {
             int i = 0;
-            List<byte> byteArray = new();
+            List<byte> byteArray = [];
             while (i < arrayOfByte.Count)
             {
                 if (arrayOfByte.Count > i + 1)

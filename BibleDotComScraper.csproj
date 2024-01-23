@@ -40,10 +40,8 @@
 	  <None Include="OldImplementation\BibleService.cs" />
 	  <None Include="OldImplementation\Book.cs" />
 	  <None Include="OldImplementation\Chapter.cs" />
-	  <None Include="Services\HttpService.cs" />
 	  <None Include="OldImplementation\Job.cs" />
 	  <None Include="OldImplementation\JobTypes.cs" />
-	  <None Include="Services\PageCacheService.cs" />
 	  <None Include="OldImplementation\Verse.cs" />
 	</ItemGroup>
 

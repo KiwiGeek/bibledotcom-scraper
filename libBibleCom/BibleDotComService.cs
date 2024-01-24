@@ -2,6 +2,7 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
+using System.Xml;
 using static System.Net.Mime.MediaTypeNames;
 using Version = LibBibleDotCom.Models.Version;
 
@@ -400,10 +401,14 @@ public static class BibleDotComService
 
     // Get translation audio
     
+    
+
 
     // bundle content into translation bundle
     public static async Task<string> CreateTranslationBundle()
     {
         throw new NotImplementedException();
     }
+
+  
 }

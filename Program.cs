@@ -15,9 +15,9 @@ internal static class Program
 
     static async Task Main()
     {
-        BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
-        string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
-        Console.WriteLine(b);
+       // BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
+       // string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
+       // Console.WriteLine(b);
 
         //  var t = await bdc.BibleDotComService.Tokenize("This is a test");
         //  var t2 = await bdc.BibleDotComService.Tokenize("This is a test<b>Hellotestworld</b>");

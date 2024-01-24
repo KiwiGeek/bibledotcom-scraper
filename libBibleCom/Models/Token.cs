@@ -1,17 +1,22 @@
 ﻿using OneOf;
+using System.Text.RegularExpressions;
 
 namespace LibBibleDotCom.Models;
 public class Token
 {
-    public List<OneOf<string, Token>> Content = new();
-    public string Tag { get; set; } = "";
-    public string Class { get; set; } = "";
+    private readonly List<OneOf<string, Token>> _content = [];
+    private readonly string _tag;
+    private readonly string _class;
+    private readonly List<KeyValuePair<string, string>> _attributes = [];
 
     public string ToXml()
     {
+
+        // for now, this is going to just build an XML string. when we're done, we'll actually make it return a xml document.
+
         if (!IsFullyUnderstood()) { throw new InvalidDataException("This token is not fully understood"); }
         string content = string.Empty;
-        foreach(OneOf<string, Token> item in Content)
+        foreach(OneOf<string, Token> item in _content)
         {
             if (item.IsT0) 
             {
@@ -35,8 +40,13 @@ public class Token
                 if (IsItalics) { tag = "Italics"; }
                 if (!IsNote)            // content we don't care about
                 {
-                    string tempContent = $"<{tag}>{item.AsT1.ToXml()}</{tag}>";
-                    // if this tempContent is just an opening and closeing tag, we don't need to reutnrin it.
+                    string attributes = string.Empty;
+                    foreach (KeyValuePair<string, string> attrib in _attributes)
+                    {
+                        attributes += $" {attrib.Key}=\"{attrib.Value}\"";
+                    }
+                    string tempContent = $"<{tag}{attributes}>{item.AsT1.ToXml()}</{tag}>";
+                    // if this tempContent is just an opening and closing tag, we don't need to return it.
                     if (tempContent != $"<{tag}></{tag}>") 
                     { 
                         content += tempContent;
@@ -45,24 +55,28 @@ public class Token
 
             }
         }
+        if (content.StartsWith("<Root>"))
+        {
+            return content[7..^7];
+        }
         return content;
     }
 
-    public bool IsFullyUnderstood()
+    private bool IsFullyUnderstood()
     {
         // we are fully understood if:
-        // a) our own tag/class is understood
-        // and b) all of our children are understood.
+        // - our own tag/class is understood
+        // - all of our children are understood.
 
         bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
                         || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
         if (!understood) 
         { 
-            Console.WriteLine($"I don't understand {Tag} {Class}");
+            Console.WriteLine($"I don't understand {_tag} {_class}");
             return false; 
         }
 
-        foreach (OneOf<string, Token> item in Content)
+        foreach (OneOf<string, Token> item in _content)
         {
             if (item.IsT0) { continue; }
             if (!item.AsT1.IsFullyUnderstood()) { return false; }
@@ -71,25 +85,38 @@ public class Token
 
     }
 
-    public bool IsRoot => Tag == "root";
-    public bool IsVersion => Tag == "div" && Class.StartsWith("class=\"version");
-    public bool IsBook => Tag == "div" && Class.StartsWith("class=\"book");
-    public bool IsChapter => Tag == "div" && Class.StartsWith("class=\"chapter");
-    public bool IsLabel => (Tag == "div" || Tag == "span") && Class.StartsWith("class=\"label");
-    public bool IsSection => Tag == "div" && Class == "class=\"s\"";
-    public bool IsHeading => Tag == "span" && Class == "class=\"heading\"";
-    public bool IsParagraph => Tag == "div" && Class == "class=\"p\"";
-    public bool IsVerse => Tag == "span" && Class.StartsWith("class=\"verse");
-    public bool IsContent => Tag == "span" && Class.StartsWith("class=\"content");
-    public bool IsNote => Tag == "span" && Class.StartsWith("class=\"note");
-    public bool IsNoteBody => Tag == "span" && Class.StartsWith("class=\" body");
-    public bool IsItalics => Tag == "span" && Class == "class=\"it\"";
+    private bool IsRoot => _tag == "root";
+    private bool IsVersion => _tag == "div" && _class.StartsWith("class=\"version");
+    private bool IsBook => _tag == "div" && _class.StartsWith("class=\"book");
+    private bool IsChapter => _tag == "div" && _class.StartsWith("class=\"chapter");
+    private bool IsLabel => (_tag == "div" || _tag == "span") && _class.StartsWith("class=\"label");
+    private bool IsSection => _tag == "div" && _class == "class=\"s\"";
+    private bool IsHeading => _tag == "span" && _class == "class=\"heading\"";
+    private bool IsParagraph => _tag == "div" && _class == "class=\"p\"";
+    private bool IsVerse => _tag == "span" && _class.StartsWith("class=\"verse");
+    private bool IsContent => _tag == "span" && _class.StartsWith("class=\"content");
+    private bool IsNote => _tag == "span" && _class.StartsWith("class=\"note");
+    private bool IsNoteBody => _tag == "span" && _class.StartsWith("class=\" body");
+    private bool IsItalics => _tag == "span" && _class == "class=\"it\"";
 
     public Token(string tag, string @class, string input)
     {
 
-        Tag = tag;
-        Class = @class;
+        _tag = tag;
+        _class = @class;
+
+        if (IsVersion)
+        {
+            // from a version class, we want to extract the versionId and the ISO language code.
+            Regex versionDecoder = new(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\"");
+            Match match = versionDecoder.Match(_class);
+            if (match.Success)
+            {
+                GroupCollection groups = match.Groups;
+                _attributes.Add(new KeyValuePair<string, string>("id", groups["id"].Value));
+                _attributes.Add(new KeyValuePair<string, string>("lang", groups["lang"].Value));
+            }
+        }
 
         while (input.Length > 0)
         {
@@ -103,21 +130,21 @@ public class Token
                 if (nextTagIndex == -1)
                 {
                     // there are no more tags, so the rest of the input is text
-                    Content.Add(input);
+                    _content.Add(input);
                     input = "";
                 }
                 else
                 {
                     // there is a tag, so the text is everything up to that tag
-                    Content.Add(input[..nextTagIndex]);
+                    _content.Add(input[..nextTagIndex]);
                     input = input[nextTagIndex..];
                 }
             }
             else
             {
                 // it's a tag
-                // temporarily, let's jsut drop that first character.
-                string openingTag = input[0..(input.IndexOf(">") + 1)];
+                // temporarily, let's just drop that first character.
+                string openingTag = input[..(input.IndexOf(">", StringComparison.Ordinal) + 1)];
                 string openTagType = openingTag.Contains(' ') ? openingTag[1..openingTag.IndexOf(' ')] : openingTag[1..^1];
                 string closingTagToFind = $"</{openTagType}>";
                 string openTagToFind = $"<{openTagType}";
@@ -129,8 +156,8 @@ public class Token
                 {
 
                     //Console.WriteLine($"Looking for {openTagToFind} or {closingTagToFind}");
-                    int openingTagCharIndex = input.IndexOf(openTagToFind, searchIndex);
-                    int closingTagCharIndex = input.IndexOf(closingTagToFind, searchIndex);
+                    int openingTagCharIndex = input.IndexOf(openTagToFind, searchIndex, StringComparison.Ordinal);
+                    int closingTagCharIndex = input.IndexOf(closingTagToFind, searchIndex, StringComparison.Ordinal);
 
                     // we're now in one of three states.
                     // we found an opening tag, but no closing tag. This would be bad
@@ -170,8 +197,8 @@ public class Token
                 // so let's go ahead and tokenize it.
                 string classInfo = input[openTagType.Length + 1] == '>' ? string.Empty : input[(openTagType.Length + 2)..input.IndexOf('>')];
                 string content = input[(openingTag.Length)..(searchIndex - closingTagToFind.Length)];
-                Token newToken = new Token(openTagType, classInfo, content);
-                Content.Add(newToken);
+                Token newToken = new (openTagType, classInfo, content);
+                _content.Add(newToken);
                 input = input[searchIndex..].Trim();
 
             }

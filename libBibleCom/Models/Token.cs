@@ -99,6 +99,23 @@ public class Token
     private bool IsNoteBody => _tag == "span" && _class.StartsWith("class=\" body");
     private bool IsItalics => _tag == "span" && _class == "class=\"it\"";
 
+    private List<KeyValuePair<string, string>> GetAttributesFromRegex(Regex regex, params (string source, string dest)[] mappings)
+    {
+        List<KeyValuePair<string, string>> results = [];
+        Match match = regex.Match(_class);
+        if (match.Success)
+        {
+            GroupCollection groups = match.Groups;
+            foreach ((string s, string d) in mappings)
+            {
+                results.Add(new KeyValuePair<string, string>(d, groups[s].Value));
+            }
+            return results;
+        }
+        else 
+            return [];
+    }
+
     public Token(string tag, string @class, string input)
     {
 
@@ -107,25 +124,16 @@ public class Token
 
         if (IsVersion)
         {
-            // from a version class, we want to extract the versionId and the ISO language code.
-            Regex versionDecoder = new(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\"");
-            Match match = versionDecoder.Match(_class);
-            if (match.Success)
-            {
-                GroupCollection groups = match.Groups;
-                _attributes.Add(new KeyValuePair<string, string>("id", groups["id"].Value));
-                _attributes.Add(new KeyValuePair<string, string>("lang", groups["lang"].Value));
-            }
+            _attributes.AddRange(GetAttributesFromRegex(
+                new Regex(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\""),
+                ("id", "id"),
+                ("lang", "lang")));
         } 
         else if (IsBook)
         {
-            Regex bookDecoder = new(".*book bk(?<book>[1-3A-Z]*)\\\"");
-            Match match = bookDecoder.Match(_class);
-            if (match.Success)
-            {
-                GroupCollection groups = match.Groups;
-                _attributes.Add(new KeyValuePair<string, string>("id", groups["book"].Value));
-            }
+            _attributes.AddRange(GetAttributesFromRegex(
+                new Regex(".*book bk(?<book>[1-3A-Z]*)\\\""),
+                ("book", "id")));
         }
 
         while (input.Length > 0)
@@ -165,7 +173,7 @@ public class Token
                 while (!done)
                 {
 
-                    //Console.WriteLine($"Looking for {openTagToFind} or {closingTagToFind}");
+                    Console.WriteLine($"Looking for {openTagToFind} or {closingTagToFind}");
                     int openingTagCharIndex = input.IndexOf(openTagToFind, searchIndex, StringComparison.Ordinal);
                     int closingTagCharIndex = input.IndexOf(closingTagToFind, searchIndex, StringComparison.Ordinal);
 
@@ -185,7 +193,7 @@ public class Token
                         // the index on past this tag.
                         tagCounter++;
                         searchIndex = openingTagCharIndex + 1;
-                        //    Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
+                            Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
                     }
                     else
                     {
@@ -193,7 +201,7 @@ public class Token
                         // the counter, and see if we're done.
                         tagCounter--;
                         searchIndex = closingTagCharIndex + 1;
-                        //   Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
+                           Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
                         if (tagCounter == 0)
                         {
                             done = true;

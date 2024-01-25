@@ -49,7 +49,7 @@ public class Token
                     // if this tempContent is just an opening and closing tag, we don't need to return it.
                     if (tempContent != $"<{tag}></{tag}>") 
                     { 
-                        content += tempContent;
+                        content = content.Trim() + tempContent.Trim();
                     }
                 }
 
@@ -57,7 +57,7 @@ public class Token
         }
         if (content.StartsWith("<Root>"))
         {
-            return content[7..^7];
+            return content[6..^7];
         }
         return content;
     }
@@ -115,6 +115,16 @@ public class Token
                 GroupCollection groups = match.Groups;
                 _attributes.Add(new KeyValuePair<string, string>("id", groups["id"].Value));
                 _attributes.Add(new KeyValuePair<string, string>("lang", groups["lang"].Value));
+            }
+        } 
+        else if (IsBook)
+        {
+            Regex bookDecoder = new(".*book bk(?<book>[1-3A-Z]*)\\\"");
+            Match match = bookDecoder.Match(_class);
+            if (match.Success)
+            {
+                GroupCollection groups = match.Groups;
+                _attributes.Add(new KeyValuePair<string, string>("id", groups["book"].Value));
             }
         }
 

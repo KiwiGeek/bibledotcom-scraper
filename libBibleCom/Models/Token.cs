@@ -20,14 +20,14 @@ public class Token
         {
             if (item.IsT0) 
             {
-                content += item.AsT0;
+                content += item.AsT0.Trim();
             }
             else
             {
                 string tag = string.Empty;
                 if (IsVerse) { tag = "Verse"; }
-                if (IsRoot) { tag = "Root"; }
-                if (IsVersion) { tag = "Version"; }
+                if (IsRoot(item.AsT1._tag)) { tag = "Root"; }
+                if (IsVersion(item.AsT1._tag, item.AsT1._class)) { tag = "Version"; }
                 if (IsBook) { tag = "Book"; }
                 if (IsChapter) { tag = "Chapter"; }
                 if (IsLabel) { tag = "Label"; } 
@@ -68,7 +68,7 @@ public class Token
         // - our own tag/class is understood
         // - all of our children are understood.
 
-        bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
+        bool understood = IsRoot(_tag) || IsVersion(_tag, _class) || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
                         || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
         if (!understood) 
         { 
@@ -85,8 +85,8 @@ public class Token
 
     }
 
-    private bool IsRoot => _tag == "root";
-    private bool IsVersion => _tag == "div" && _class.StartsWith("class=\"version");
+    private bool IsRoot(string tag) => tag == "root";
+    private bool IsVersion(string tag, string @class) => tag == "div" && @class.StartsWith("class=\"version");
     private bool IsBook => _tag == "div" && _class.StartsWith("class=\"book");
     private bool IsChapter => _tag == "div" && _class.StartsWith("class=\"chapter");
     private bool IsLabel => (_tag == "div" || _tag == "span") && _class.StartsWith("class=\"label");
@@ -112,8 +112,8 @@ public class Token
             }
             return results;
         }
-        else 
-            return [];
+        
+        return [];
     }
 
     public Token(string tag, string @class, string input)
@@ -122,7 +122,7 @@ public class Token
         _tag = tag;
         _class = @class;
 
-        if (IsVersion)
+        if (IsVersion(_tag, _class))
         {
             _attributes.AddRange(GetAttributesFromRegex(
                 new Regex(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\""),

@@ -11,49 +11,46 @@ public class Token
 
     public string ToXml()
     {
-
         // for now, this is going to just build an XML string. when we're done, we'll actually make it return a xml document.
 
         if (!IsFullyUnderstood()) { throw new InvalidDataException("This token is not fully understood"); }
         string content = string.Empty;
-        foreach(OneOf<string, Token> item in _content)
+        string tag = string.Empty;
+        if (IsVerse) { tag = "Verse"; }
+        if (IsRoot) { tag = "Root"; }
+        if (IsVersion) { tag = "Version"; }
+        if (IsBook) { tag = "Book"; }
+        if (IsChapter) { tag = "Chapter"; }
+        if (IsLabel) { tag = "Label"; } 
+        if (IsSection) { tag = "Section"; }
+        if (IsHeading) { tag = "Heading"; }
+        if (IsParagraph) { tag = "Paragraph"; }
+        if (IsContent) { tag = "Content"; }
+        if (IsNote) { tag = "Note"; }
+        if (IsNoteBody) { tag = "NoteBody"; }
+        if (IsItalics) { tag = "Italics"; }
+        if (!IsNote)
         {
-            if (item.IsT0) 
+            string attributes = string.Empty;
+            foreach (KeyValuePair<string, string> attrib in _attributes)
             {
-                content += item.AsT0.Trim();
+                attributes += $" {attrib.Key}=\"{attrib.Value}\"";
             }
-            else
+            string openingTag = $"<{tag}{attributes}>";
+            string contentTag = string.Empty;
+            string closingTag = $"</{tag}>";
+            foreach (OneOf<string, Token> item in _content)
             {
-                string tag = string.Empty;
-                if (IsVerse) { tag = "Verse"; }
-                if (IsRoot(item.AsT1._tag)) { tag = "Root"; }
-                if (IsVersion(item.AsT1._tag, item.AsT1._class)) { tag = "Version"; }
-                if (IsBook) { tag = "Book"; }
-                if (IsChapter) { tag = "Chapter"; }
-                if (IsLabel) { tag = "Label"; } 
-                if (IsSection) { tag = "Section"; }
-                if (IsHeading) { tag = "Heading"; }
-                if (IsParagraph) { tag = "Paragraph"; }
-                if (IsContent) { tag = "Content"; }
-                if (IsNote) { tag = "Note"; }
-                if (IsNoteBody) { tag = "NoteBody"; }
-                if (IsItalics) { tag = "Italics"; }
-                if (!IsNote)            // content we don't care about
+                if (item.IsT0)
                 {
-                    string attributes = string.Empty;
-                    foreach (KeyValuePair<string, string> attrib in _attributes)
-                    {
-                        attributes += $" {attrib.Key}=\"{attrib.Value}\"";
-                    }
-                    string tempContent = $"<{tag}{attributes}>{item.AsT1.ToXml()}</{tag}>";
-                    // if this tempContent is just an opening and closing tag, we don't need to return it.
-                    if (tempContent != $"<{tag}></{tag}>") 
-                    { 
-                        content = content.Trim() + tempContent.Trim();
-                    }
+                    contentTag += item.AsT0.Trim();
                 }
-
+                else
+                {
+                    contentTag += item.AsT1.ToXml().Trim();
+                }
             }
+            content = $"{openingTag}{contentTag}{closingTag}";
         }
         if (content.StartsWith("<Root>"))
         {
@@ -68,7 +65,7 @@ public class Token
         // - our own tag/class is understood
         // - all of our children are understood.
 
-        bool understood = IsRoot(_tag) || IsVersion(_tag, _class) || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
+        bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
                         || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
         if (!understood) 
         { 
@@ -85,8 +82,8 @@ public class Token
 
     }
 
-    private bool IsRoot(string tag) => tag == "root";
-    private bool IsVersion(string tag, string @class) => tag == "div" && @class.StartsWith("class=\"version");
+    private bool IsRoot => _tag == "root";
+    private bool IsVersion => _tag == "div" && _class.StartsWith("class=\"version");
     private bool IsBook => _tag == "div" && _class.StartsWith("class=\"book");
     private bool IsChapter => _tag == "div" && _class.StartsWith("class=\"chapter");
     private bool IsLabel => (_tag == "div" || _tag == "span") && _class.StartsWith("class=\"label");
@@ -122,7 +119,7 @@ public class Token
         _tag = tag;
         _class = @class;
 
-        if (IsVersion(_tag, _class))
+        if (IsVersion)
         {
             _attributes.AddRange(GetAttributesFromRegex(
                 new Regex(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\""),

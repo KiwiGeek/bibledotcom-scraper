@@ -136,9 +136,9 @@ public class Token
         {
             _attributes.AddRange(GetAttributesFromRegex(
                 new Regex(@".*data-usfm=""(?<usfm>(?<book>.*)\.(?<chapter>\d+))"""),
+                ("usfm", "id"),
                 ("book", "book"),
-                ("chapter", "chapter"),
-                ("usfm", "id")));
+                ("chapter", "chapter")));
         }    
 
         while (input.Length > 0)

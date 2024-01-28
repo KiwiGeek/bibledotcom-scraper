@@ -122,16 +122,24 @@ public class Token
         if (IsVersion)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                new Regex(".*data-vid=\\\"(?<id>\\d*)\\\".*data-iso6393=\\\"(?<lang>.*)\\\""),
+                new Regex(@".*data-vid=\""(?<id>\d+)\"".*data-iso6393=\""(?<lang>.{3})\"""),
                 ("id", "id"),
                 ("lang", "lang")));
         } 
         else if (IsBook)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                new Regex(".*book bk(?<book>[1-3A-Z]*)\\\""),
+                new Regex(@".*book bk(?<book>[1-3A-Z]+)\"""),
                 ("book", "id")));
-        }
+        } 
+        else if (IsChapter)
+        {
+            _attributes.AddRange(GetAttributesFromRegex(
+                new Regex(@".*data-usfm=""(?<usfm>(?<book>.*)\.(?<chapter>\d+))"""),
+                ("book", "book"),
+                ("chapter", "chapter"),
+                ("usfm", "id")));
+        }    
 
         while (input.Length > 0)
         {

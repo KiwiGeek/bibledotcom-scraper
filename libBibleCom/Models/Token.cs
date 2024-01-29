@@ -1,5 +1,6 @@
 ﻿using OneOf;
 using System.Text.RegularExpressions;
+using System.Xml;
 
 namespace LibBibleDotCom.Models;
 public class Token
@@ -21,7 +22,8 @@ public class Token
         if (IsVersion) { tag = "Version"; }
         if (IsBook) { tag = "Book"; }
         if (IsChapter) { tag = "Chapter"; }
-        if (IsLabel) { tag = "Label"; } 
+        if (IsChapterLabel) { tag = "ChapterLabel"; }
+        if (IsVerseLabel) { tag = "VerseLabel"; }
         if (IsSection) { tag = "Section"; }
         if (IsHeading) { tag = "Heading"; }
         if (IsParagraph) { tag = "Paragraph"; }
@@ -29,34 +31,48 @@ public class Token
         if (IsNote) { tag = "Note"; }
         if (IsNoteBody) { tag = "NoteBody"; }
         if (IsItalics) { tag = "Italics"; }
-        if (!IsNote)
+        string attributes = string.Empty;
+        foreach (KeyValuePair<string, string> attrib in _attributes)
         {
-            string attributes = string.Empty;
-            foreach (KeyValuePair<string, string> attrib in _attributes)
-            {
-                attributes += $" {attrib.Key}=\"{attrib.Value}\"";
-            }
-            string openingTag = $"<{tag}{attributes}>";
-            string contentTag = string.Empty;
-            string closingTag = $"</{tag}>";
-            foreach (OneOf<string, Token> item in _content)
-            {
-                if (item.IsT0)
-                {
-                    contentTag += item.AsT0.Trim();
-                }
-                else
-                {
-                    contentTag += item.AsT1.ToXml().Trim();
-                }
-            }
-            content = $"{openingTag}{contentTag}{closingTag}";
+            attributes += $" {attrib.Key}=\"{attrib.Value}\"";
         }
-        if (content.StartsWith("<Root>"))
+        string openingTag = $"<{tag}{attributes}>";
+        string contentTag = string.Empty;
+        string closingTag = $"</{tag}>";
+        foreach (OneOf<string, Token> item in _content)
         {
-            return content[6..^7];
+            if (item.IsT0)
+            {
+                contentTag += item.AsT0.Trim();
+            }
+            else
+            {
+                contentTag += item.AsT1.ToXml().Trim();
+            }
         }
-        return content;
+        content = $"{openingTag}{contentTag}{closingTag}";
+
+        // if we're not the root element, we don't need to do any clean-up work, so just return the results.
+        if (!content.StartsWith("<Root>")) { return content; }
+
+        // Post parsing clean-up
+        content = PurgeNotes(content);
+
+        return content[6..^7];
+    }
+
+    private string PurgeNotes(string content)
+    {
+        XmlDocument xmlDoc = new XmlDocument();
+        xmlDoc.LoadXml(content);
+
+        XmlNodeList noteNodes = xmlDoc.SelectNodes("//Note");
+        foreach (XmlNode noteNode in noteNodes)
+        {
+            noteNode.ParentNode.RemoveChild(noteNode);
+        }
+
+        return xmlDoc.OuterXml;
     }
 
     private bool IsFullyUnderstood()
@@ -65,7 +81,7 @@ public class Token
         // - our own tag/class is understood
         // - all of our children are understood.
 
-        bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsLabel || IsSection || IsHeading || IsParagraph
+        bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsChapterLabel || IsVerseLabel || IsSection || IsHeading || IsParagraph
                         || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
         if (!understood) 
         { 
@@ -86,7 +102,8 @@ public class Token
     private bool IsVersion => _tag == "div" && _class.StartsWith("class=\"version");
     private bool IsBook => _tag == "div" && _class.StartsWith("class=\"book");
     private bool IsChapter => _tag == "div" && _class.StartsWith("class=\"chapter");
-    private bool IsLabel => (_tag == "div" || _tag == "span") && _class.StartsWith("class=\"label");
+    private bool IsChapterLabel => _tag == "div" && _class.StartsWith("class=\"label");
+    private bool IsVerseLabel => _tag == "span" && _class.StartsWith("class=\"label");
     private bool IsSection => _tag == "div" && _class == "class=\"s\"";
     private bool IsHeading => _tag == "span" && _class == "class=\"heading\"";
     private bool IsParagraph => _tag == "div" && _class == "class=\"p\"";

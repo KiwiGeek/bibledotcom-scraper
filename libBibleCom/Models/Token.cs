@@ -3,26 +3,36 @@ using System.Text.RegularExpressions;
 using System.Xml;
 
 namespace LibBibleDotCom.Models;
-public class Token
+public partial class Token
 {
     private readonly List<OneOf<string, Token>> _content = [];
     private readonly string _tag;
     private readonly string _class;
     private readonly List<KeyValuePair<string, string>> _attributes = [];
 
+    [GeneratedRegex(@".*data-vid=\""(?<id>\d+)\"".*data-iso6393=\""(?<lang>.{3})\""", RegexOptions.IgnoreCase)]
+    private static partial Regex VersionRegex();
+
+    [GeneratedRegex(@".*book bk(?<book>[1-3A-Z]+)\""", RegexOptions.IgnoreCase)]
+    private static partial Regex BookRegex();
+
+    [GeneratedRegex(@".*data-usfm=""(?<usfm>(?<book>.*)\.(?<chapter>\d+))""", RegexOptions.IgnoreCase)]
+    private static partial Regex ChapterRegex();
+
+
     public string ToXml()
     {
         // for now, this is going to just build an XML string. when we're done, we'll actually make it return a xml document.
 
         if (!IsFullyUnderstood()) { throw new InvalidDataException("This token is not fully understood"); }
-        string content = string.Empty;
+
         string tag = string.Empty;
         if (IsVerse) { tag = "Verse"; }
         if (IsRoot) { tag = "Root"; }
         if (IsVersion) { tag = "Version"; }
         if (IsBook) { tag = "Book"; }
         if (IsChapter) { tag = "Chapter"; }
-        if (IsChapterLabel) { tag = "ChapterLabel"; }
+        if (IsChapterLabel) { tag = "ChapterHeading"; }
         if (IsVerseLabel) { tag = "VerseLabel"; }
         if (IsSection) { tag = "Section"; }
         if (IsHeading) { tag = "Heading"; }
@@ -50,28 +60,52 @@ public class Token
                 contentTag += item.AsT1.ToXml().Trim();
             }
         }
-        content = $"{openingTag}{contentTag}{closingTag}";
+        string content = $"{openingTag}{contentTag}{closingTag}";
 
         // if we're not the root element, we don't need to do any clean-up work, so just return the results.
         if (!content.StartsWith("<Root>")) { return content; }
 
         // Post parsing clean-up
         content = PurgeNotes(content);
+        content = ProcessSectionHeaders(content);
 
         return content[6..^7];
     }
 
     private string PurgeNotes(string content)
     {
-        XmlDocument xmlDoc = new XmlDocument();
+        XmlDocument xmlDoc = new();
         xmlDoc.LoadXml(content);
 
-        XmlNodeList noteNodes = xmlDoc.SelectNodes("//Note");
+        XmlNodeList? noteNodes = xmlDoc.SelectNodes("//Note");
+        if (noteNodes == null) { return xmlDoc.OuterXml; }
         foreach (XmlNode noteNode in noteNodes)
         {
-            noteNode.ParentNode.RemoveChild(noteNode);
+            noteNode.ParentNode?.RemoveChild(noteNode);
         }
+        return xmlDoc.OuterXml;
+    }
 
+    private string ProcessSectionHeaders(string content)
+    {
+        XmlDocument xmlDoc = new();
+        xmlDoc.LoadXml(content);
+
+        XmlNodeList? sectionNodes = xmlDoc.SelectNodes("//Section");
+        if (sectionNodes == null) { return xmlDoc.OuterXml; };
+        foreach (XmlNode sectionNode in sectionNodes)
+        {
+            XmlNode? headingNode = sectionNode.SelectSingleNode("Heading");
+            if (headingNode == null) { continue; }
+
+            // Create the new SectionHeader Node
+            
+            XmlElement sectionHeaderNode = xmlDoc.CreateElement("SectionHeading");
+            sectionHeaderNode.InnerXml = headingNode.InnerXml;
+
+            // replace the existing nodes.
+            sectionNode.ParentNode.ReplaceChild(sectionHeaderNode, sectionNode);
+        }
         return xmlDoc.OuterXml;
     }
 
@@ -83,10 +117,10 @@ public class Token
 
         bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsChapterLabel || IsVerseLabel || IsSection || IsHeading || IsParagraph
                         || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
-        if (!understood) 
-        { 
+        if (!understood)
+        {
             Console.WriteLine($"I don't understand {_tag} {_class}");
-            return false; 
+            return false;
         }
 
         foreach (OneOf<string, Token> item in _content)
@@ -126,7 +160,7 @@ public class Token
             }
             return results;
         }
-        
+
         return [];
     }
 
@@ -139,24 +173,24 @@ public class Token
         if (IsVersion)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                new Regex(@".*data-vid=\""(?<id>\d+)\"".*data-iso6393=\""(?<lang>.{3})\"""),
+                VersionRegex(),
                 ("id", "id"),
                 ("lang", "lang")));
-        } 
+        }
         else if (IsBook)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                new Regex(@".*book bk(?<book>[1-3A-Z]+)\"""),
+                BookRegex(),
                 ("book", "id")));
-        } 
+        }
         else if (IsChapter)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                new Regex(@".*data-usfm=""(?<usfm>(?<book>.*)\.(?<chapter>\d+))"""),
+                ChapterRegex(),
                 ("usfm", "id"),
                 ("book", "book"),
                 ("chapter", "chapter")));
-        }    
+        }
 
         while (input.Length > 0)
         {
@@ -184,7 +218,7 @@ public class Token
             {
                 // it's a tag
                 // temporarily, let's just drop that first character.
-                string openingTag = input[..(input.IndexOf(">", StringComparison.Ordinal) + 1)];
+                string openingTag = input[..(input.IndexOf('>', StringComparison.Ordinal) + 1)];
                 string openTagType = openingTag.Contains(' ') ? openingTag[1..openingTag.IndexOf(' ')] : openingTag[1..^1];
                 string closingTagToFind = $"</{openTagType}>";
                 string openTagToFind = $"<{openTagType}";
@@ -215,7 +249,7 @@ public class Token
                         // the index on past this tag.
                         tagCounter++;
                         searchIndex = openingTagCharIndex + 1;
-                            Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
+                        Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
                     }
                     else
                     {
@@ -223,7 +257,7 @@ public class Token
                         // the counter, and see if we're done.
                         tagCounter--;
                         searchIndex = closingTagCharIndex + 1;
-                           Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
+                        Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
                         if (tagCounter == 0)
                         {
                             done = true;
@@ -237,7 +271,7 @@ public class Token
                 // so let's go ahead and tokenize it.
                 string classInfo = input[openTagType.Length + 1] == '>' ? string.Empty : input[(openTagType.Length + 2)..input.IndexOf('>')];
                 string content = input[(openingTag.Length)..(searchIndex - closingTagToFind.Length)];
-                Token newToken = new (openTagType, classInfo, content);
+                Token newToken = new(openTagType, classInfo, content);
                 _content.Add(newToken);
                 input = input[searchIndex..].Trim();
 

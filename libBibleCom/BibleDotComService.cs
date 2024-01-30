@@ -392,7 +392,7 @@ public static class BibleDotComService
         return await GetDecodedVersion((uint)id, null, destinationFilePath, progress, cancellationToken);
     }
 
-    public static async Task<Token> Tokenize(string input)
+    public static Token Tokenize(string input)
     {
         return new Token("root", string.Empty, input);
     }
@@ -405,7 +405,7 @@ public static class BibleDotComService
 
 
     // bundle content into translation bundle
-    public static async Task<string> CreateTranslationBundle()
+    public static string CreateTranslationBundle()
     {
         throw new NotImplementedException();
     }

@@ -19,6 +19,9 @@ public partial class Token
     [GeneratedRegex(@".*data-usfm=""(?<usfm>(?<book>.*)\.(?<chapter>\d+))""", RegexOptions.IgnoreCase)]
     private static partial Regex ChapterRegex();
 
+    [GeneratedRegex(@"data-usfm=""(?<usfm>(?<book>[A-Z0-9]+).(?<chapter>\d+).(?<verse>\d+))""", RegexOptions.IgnoreCase)]
+    private static partial Regex VerseRegex();
+
 
     public string ToXml()
     {
@@ -92,7 +95,7 @@ public partial class Token
         xmlDoc.LoadXml(content);
 
         XmlNodeList? sectionNodes = xmlDoc.SelectNodes("//Section");
-        if (sectionNodes == null) { return xmlDoc.OuterXml; };
+        if (sectionNodes == null) { return xmlDoc.OuterXml; }
         foreach (XmlNode sectionNode in sectionNodes)
         {
             XmlNode? headingNode = sectionNode.SelectSingleNode("Heading");
@@ -104,7 +107,7 @@ public partial class Token
             sectionHeaderNode.InnerXml = headingNode.InnerXml;
 
             // replace the existing nodes.
-            sectionNode.ParentNode.ReplaceChild(sectionHeaderNode, sectionNode);
+            sectionNode.ParentNode!.ReplaceChild(sectionHeaderNode, sectionNode);
         }
         return xmlDoc.OuterXml;
     }
@@ -190,6 +193,15 @@ public partial class Token
                 ("usfm", "id"),
                 ("book", "book"),
                 ("chapter", "chapter")));
+        }
+        else if (IsVerse)
+        {
+            _attributes.AddRange(GetAttributesFromRegex(
+                VerseRegex(),
+                ("usfm", "id"),
+                ("book", "book"),
+                ("chapter", "chapter"),
+                ("verse", "verse")));
         }
 
         while (input.Length > 0)

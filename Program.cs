@@ -13,7 +13,7 @@ internal static class Program
         public List<VersionMetadata> Metadata = [];
     }
 
-    static async Task Main()
+    static void Main()
     {
        // BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
        // string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");

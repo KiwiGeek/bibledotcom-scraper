@@ -68,9 +68,11 @@ public partial class Token
         // if we're not the root element, we don't need to do any clean-up work, so just return the results.
         if (!content.StartsWith("<Root>")) { return content; }
 
-        // Post parsing clean-up
+        // Mid-parsing clean-up
         content = PurgeNotes(content);
         content = ProcessSectionHeaders(content);
+        content = ProcessContentNodes(content);
+        
 
         return content[6..^7];
     }
@@ -111,6 +113,31 @@ public partial class Token
         }
         return xmlDoc.OuterXml;
     }
+
+    private string ProcessContentNodes(string content)
+    {
+        XmlDocument xmlDoc = new();
+        xmlDoc.LoadXml(content);
+
+        while (xmlDoc.SelectSingleNode("//Content") != null) 
+        {
+            XmlNode node = xmlDoc.SelectSingleNode("//Content")!;
+
+            // find the parent node of node
+            XmlNode parentNode = node.ParentNode!;
+
+            // find our node in the parent's node.
+            foreach (XmlNode childNode in parentNode.ChildNodes)
+            {
+                if (childNode != node) { continue; }
+                XmlNode newText = xmlDoc.CreateTextNode(childNode.InnerText + " ");
+                parentNode.ReplaceChild(newText, childNode);
+                break;
+            }
+        }
+        return xmlDoc.OuterXml;
+    }
+
 
     private bool IsFullyUnderstood()
     {

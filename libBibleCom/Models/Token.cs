@@ -72,6 +72,7 @@ public partial class Token
         content = PurgeNotes(content);
         content = ProcessSectionHeaders(content);
         content = ProcessContentNodes(content);
+        content = ProcessItalicsNodes(content);
         
 
         return content[6..^7];
@@ -136,6 +137,11 @@ public partial class Token
             }
         }
         return xmlDoc.OuterXml;
+    }
+
+    private string ProcessItalicsNodes(string content)
+    {
+        return content.Replace("<Italics>", "&lt;Italics&gt;").Replace("</Italics>", "&lt;/Italics&gt;");
     }
 
 

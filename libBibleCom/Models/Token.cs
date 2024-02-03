@@ -274,7 +274,7 @@ public partial class Token
                 while (!done)
                 {
 
-                    Console.WriteLine($"Looking for {openTagToFind} or {closingTagToFind}");
+                    //Console.WriteLine($"Looking for {openTagToFind} or {closingTagToFind}");
                     int openingTagCharIndex = input.IndexOf(openTagToFind, searchIndex, StringComparison.Ordinal);
                     int closingTagCharIndex = input.IndexOf(closingTagToFind, searchIndex, StringComparison.Ordinal);
 
@@ -294,7 +294,7 @@ public partial class Token
                         // the index on past this tag.
                         tagCounter++;
                         searchIndex = openingTagCharIndex + 1;
-                        Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
+                        //Console.WriteLine($"The next tag was an opening Tag, at {openingTagCharIndex}. We are {tagCounter} tags deep.");
                     }
                     else
                     {
@@ -302,7 +302,7 @@ public partial class Token
                         // the counter, and see if we're done.
                         tagCounter--;
                         searchIndex = closingTagCharIndex + 1;
-                        Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
+                        //Console.WriteLine($"The next tag was a closing Tag, at {closingTagCharIndex}. We are {tagCounter} tags deep.");
                         if (tagCounter == 0)
                         {
                             done = true;

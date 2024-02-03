@@ -1,5 +1,7 @@
 ﻿using LibBibleDotCom.Models;
 using BDC = LibBibleDotCom;
+using System.IO;
+using System.IO.Compression;
 
 namespace BibleDotComScraper;
 
@@ -13,11 +15,33 @@ internal static class Program
         public List<VersionMetadata> Metadata = [];
     }
 
-    static void Main()
+    static async Task Main()
     {
-       // BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
-       // string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
-       // Console.WriteLine(b);
+        //BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
+        //string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
+        //Console.WriteLine(b);
+        //Console.ReadKey();
+
+        string sourceFile = "C:\\Users\\jpenman\\AppData\\Roaming\\LibBibleDotCom\\114-19.zip";
+        await using FileStream file = File.OpenRead(sourceFile);
+        using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Read))
+        {
+            foreach (ZipArchiveEntry entry in zip.Entries)
+            {
+                await using Stream stream = entry.Open();
+                StreamReader sr = new StreamReader(stream);
+                string chapterName = entry.Name;
+                Console.WriteLine(chapterName);
+                string chapterContent = sr.ReadToEnd();
+                Console.WriteLine("Plaintext");
+                Console.WriteLine(chapterContent);
+                Token t = BDC.BibleDotComService.Tokenize(chapterContent);
+                Console.WriteLine("Tokenized");
+                Console.WriteLine(t.ToXml());
+                Console.ReadKey();
+                Console.Clear();
+            }
+        }
 
         //  var t = await bdc.BibleDotComService.Tokenize("This is a test");
         //  var t2 = await bdc.BibleDotComService.Tokenize("This is a test<b>Hellotestworld</b>");

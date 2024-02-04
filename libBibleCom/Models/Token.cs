@@ -44,6 +44,7 @@ public partial class Token
         if (IsNote) { tag = "Note"; }
         if (IsNoteBody) { tag = "NoteBody"; }
         if (IsItalics) { tag = "Italics"; }
+        if (IsSmallCaps) { tag = "SmallCaps"; }
         string attributes = string.Empty;
         foreach (KeyValuePair<string, string> attrib in _attributes)
         {
@@ -72,7 +73,7 @@ public partial class Token
         content = PurgeNotes(content);
         content = ProcessSectionHeaders(content);
         content = ProcessContentNodes(content);
-        content = ProcessItalicsNodes(content);
+        content = ProcessTypeFaceNodes(content);
         
 
         return content[6..^7];
@@ -139,9 +140,13 @@ public partial class Token
         return xmlDoc.OuterXml;
     }
 
-    private string ProcessItalicsNodes(string content)
+    private string ProcessTypeFaceNodes(string content)
     {
-        return content.Replace("<Italics>", "&lt;Italics&gt;").Replace("</Italics>", "&lt;/Italics&gt;");
+        return content
+            .Replace("<Italics>", "&lt;Italics&gt;")
+            .Replace("</Italics>", "&lt;/Italics&gt;")
+            .Replace("<SmallCaps>", "&lt;SmallCaps&gt;")
+            .Replace("</SmallCaps>", "&lt;/SmallCaps&gt;");
     }
 
 
@@ -152,7 +157,7 @@ public partial class Token
         // - all of our children are understood.
 
         bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsChapterLabel || IsVerseLabel || IsSection || IsHeading || IsParagraph
-                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics;
+                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics || IsSmallCaps;
         if (!understood)
         {
             Console.WriteLine($"I don't understand {_tag} {_class}");
@@ -182,6 +187,7 @@ public partial class Token
     private bool IsNote => _tag == "span" && _class.StartsWith("class=\"note");
     private bool IsNoteBody => _tag == "span" && _class.StartsWith("class=\" body");
     private bool IsItalics => _tag == "span" && _class == "class=\"it\"";
+    private bool IsSmallCaps => _tag == "span" && _class == "class=\"sc\"";
 
     private List<KeyValuePair<string, string>> GetAttributesFromRegex(Regex regex, params (string source, string dest)[] mappings)
     {

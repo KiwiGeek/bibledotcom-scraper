@@ -22,6 +22,9 @@ public partial class Token
     [GeneratedRegex(@"data-usfm=""(?<usfm>(?<book>[A-Z0-9]+).(?<chapter>\d+).(?<verse>\d+))""", RegexOptions.IgnoreCase)]
     private static partial Regex VerseRegex();
 
+    [GeneratedRegex(@"class=""q(?<level>\d)""", RegexOptions.IgnoreCase)]
+    private static partial Regex PoeticRegex();
+
 
     public string ToXml()
     {
@@ -45,6 +48,7 @@ public partial class Token
         if (IsNoteBody) { tag = "NoteBody"; }
         if (IsItalics) { tag = "Italics"; }
         if (IsSmallCaps) { tag = "SmallCaps"; }
+        if (IsPoetic) { tag = "Poetic"; }
         string attributes = string.Empty;
         foreach (KeyValuePair<string, string> attrib in _attributes)
         {
@@ -157,7 +161,7 @@ public partial class Token
         // - all of our children are understood.
 
         bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsChapterLabel || IsVerseLabel || IsSection || IsHeading || IsParagraph
-                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics || IsSmallCaps;
+                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics || IsSmallCaps || IsPoetic;
         if (!understood)
         {
             Console.WriteLine($"I don't understand {_tag} {_class}");
@@ -188,6 +192,7 @@ public partial class Token
     private bool IsNoteBody => _tag == "span" && _class.StartsWith("class=\" body");
     private bool IsItalics => _tag == "span" && _class == "class=\"it\"";
     private bool IsSmallCaps => _tag == "span" && _class == "class=\"sc\"";
+    private bool IsPoetic => _tag == "div" && PoeticRegex().IsMatch(_class);
 
     private List<KeyValuePair<string, string>> GetAttributesFromRegex(Regex regex, params (string source, string dest)[] mappings)
     {
@@ -241,6 +246,12 @@ public partial class Token
                 ("book", "book"),
                 ("chapter", "chapter"),
                 ("verse", "verse")));
+        } 
+        else if (IsPoetic)
+        {
+            _attributes.AddRange(GetAttributesFromRegex(
+                PoeticRegex(),
+                ("level", "level")));
         }
 
         while (input.Length > 0)

@@ -78,6 +78,7 @@ public partial class Token
         content = ProcessSectionHeaders(content);
         content = ProcessContentNodes(content);
         content = ProcessTypeFaceNodes(content);
+        content = ProcessPoeticVerses(content);
         
 
         return content[6..^7];
@@ -153,6 +154,56 @@ public partial class Token
             .Replace("</SmallCaps>", "&lt;/SmallCaps&gt;");
     }
 
+    private string ProcessPoeticVerses(string content)
+    {
+        /* 
+         * Currently, Poetic verses look like this: (As a child of a chapter node):
+         * <Poetic level="1">
+         *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">" &lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David; </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">Peace, peace to you, </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">And peace to your helpers! </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">For your God helps you." </Verse>
+         * </Poetic>
+         * 
+         * We want to turn them into the following:
+         * 
+         * <PoeticVerse id="1CH.12.18" book="1CH" chapter="12" verse="18">
+         *   <Indent level="1">&lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;</Indent>
+         *   <Indent level="2">We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </Indent>
+         *   <Indent level="2">Peace, peace to you, </Indent>
+         *   <Indent level="2">And peace to your helpers! </Indent>
+         *   <Indent level="2">For your God helps you." </Indent>
+         * </PoeticVerse>
+         * 
+         * Any contiguous Poetic nodes which contain verse nodes with the same USFM should be merged in this manner.
+         * 
+         * Of course, we will actually want to use &lt; and &gt; rather than the Indents shown, so what we'll end up with is:
+         * 
+         * <PoeticVerse id="1CH.12.18" book="1CH" chapter="12" verse="18">
+         * &lt;Ident level="1"&gt;&lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;&lt;/Ident&gt; etc. 
+         * 
+         * This would be rendered by a rendering surface as something like this pseudocode (although preferable with styling rather than &nbsp;s):
+         * <p>
+         *   <i>We are</i> yours, O David;<br/>
+         *   &nbsp;&nbsp;We <i> are</i> on your side, O son of Jesse<br/>
+         *   &nbsp;&nbsp;Peace, peace to you, <br/>
+         *   &nbsp;&nbsp;And peace to your helpers! <br/>
+         *   &nbsp;&nbsp;For your God helps you.
+         * </p>
+         * 
+         */
+
+        return content;
+    }
 
     private bool IsFullyUnderstood()
     {

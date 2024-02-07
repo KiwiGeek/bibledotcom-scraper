@@ -147,6 +147,7 @@ public partial class Token
 
     private string ProcessTypeFaceNodes(string content)
     {
+        // Todo: we don't need this. We can have semantic tags in the text. What was I thinking?
         return content
             .Replace("<Italics>", "&lt;Italics&gt;")
             .Replace("</Italics>", "&lt;/Italics&gt;")
@@ -173,7 +174,7 @@ public partial class Token
          * <Poetic level="2">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">For your God helps you." </Verse>
          * </Poetic>
-         * 
+         *
          * We want to turn them into the following:
          * 
          * <PoeticVerse id="1CH.12.18" book="1CH" chapter="12" verse="18">
@@ -186,20 +187,52 @@ public partial class Token
          * 
          * Any contiguous Poetic nodes which contain verse nodes with the same USFM should be merged in this manner.
          * 
-         * Of course, we will actually want to use &lt; and &gt; rather than the Indents shown, so what we'll end up with is:
+         * Even more problematic, Isaiah 37:22 (problematic from a solving this problem perspective, not from a verse
+         * context perspective):
+         *
+         * <Paragraph>
+         *  	...
+         *  	<Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">
+         * 		<VerseLabel>22</VerseLabel>this &lt;Italics&gt;is &lt;/Italics&gt;the word which the
+         *        &lt;SmallCaps&gt;Lord &lt;/SmallCaps&gt;has spoken concerning him: 
+         *  	</Verse>
+         * </Paragraph>
+         * <Poetic level="1">
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">“The virgin, the daughter of Zion, </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">Has despised you, laughed you to scorn; </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">The daughter of Jerusalem </Verse>
+         * </Poetic>
+         * <Poetic level="2">
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">Has shaken &lt;Italics&gt;her
+         *      &lt;/Italics&gt;head behind your back! </Verse>
+         * </Poetic>
          * 
-         * <PoeticVerse id="1CH.12.18" book="1CH" chapter="12" verse="18">
-         * &lt;Ident level="1"&gt;&lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;&lt;/Ident&gt; etc. 
+         * In this case we have a verse which is spread across two distinct visual nodes. We can't put the poetic lines
+         * within the Paragraph above, because that's not now it looks in the Bible, and we can't move the plain text
+         * verse to the Poetic verse node, because that's a display block, rather than an inline block. So we have to
+         * wrestle with the unique fact that we're trying to handle displaying the verse by itself, as well as inline
+         * with the remainder of the verse. To do this, we're going to add an optional attribute to the Verse and
+         * PoeticVerse Nodes, partial="true", along with partialOrderId="0" etc. Then, we can ignore these tags when
+         * rendering the flow of the document, but when pulling out a specific verse, we can ensure that we get all
+         * of the verse. 
          * 
-         * This would be rendered by a rendering surface as something like this pseudocode (although preferable with styling rather than &nbsp;s):
-         * <p>
-         *   <i>We are</i> yours, O David;<br/>
-         *   &nbsp;&nbsp;We <i> are</i> on your side, O son of Jesse<br/>
-         *   &nbsp;&nbsp;Peace, peace to you, <br/>
-         *   &nbsp;&nbsp;And peace to your helpers! <br/>
-         *   &nbsp;&nbsp;For your God helps you.
-         * </p>
-         * 
+         * <Paragraph>
+         *   ...
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="0">
+         *     <VerseLabel>22</VerseLabel>this <Italics>is</Italics> the word which the <SmallCaps>Lord</SmallCaps> has spoken concerning him: 
+         *   </Verse>
+         * </Paragraph>
+         * <PoeticVerse id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="1">
+         *   <Indent level="1">“The virgin, the daughter of Zion, </Indent>
+         *   <Indent level="2">Has despised you, laughed you to scorn; </Indent>
+         *   <Indent level="2">The daughter of Jerusalem </Indent>
+         *   <Indent level="2">Has shaken <Italics>her</Italics> head behind your back! </Indent>
+         * </PoeticVerse>
+         *
          */
 
         return content;

@@ -23,7 +23,7 @@ public partial class Token
     private static partial Regex VerseRegex();
 
     [GeneratedRegex(@"class=""q(?<level>\d)""", RegexOptions.IgnoreCase)]
-    private static partial Regex PoeticRegex();
+    private static partial Regex QuoteBlockRegex();
 
 
     public string ToXml()
@@ -48,7 +48,7 @@ public partial class Token
         if (IsNoteBody) { tag = "NoteBody"; }
         if (IsItalics) { tag = "Italics"; }
         if (IsSmallCaps) { tag = "SmallCaps"; }
-        if (IsPoetic) { tag = "Poetic"; }
+        if (IsQuoteBlock) { tag = "QuoteBlock"; }
         string attributes = string.Empty;
         foreach (KeyValuePair<string, string> attrib in _attributes)
         {
@@ -157,35 +157,41 @@ public partial class Token
 
     private string ProcessPoeticVerses(string content)
     {
-        /* 
-         * Currently, Poetic verses look like this: (As a child of a chapter node):
-         * <Poetic level="1">
+        /*
+         * We are going to assume that the "Q" in the styling refers to a quote block level, and not anything to do with
+         * whether it's a poetic line (as the documentation seems to imply).
+         *
+         * 
+         * 
+         * Currently, QuoteBlock verses look like this: (As a child of a chapter node):
+         * <QuoteBlock level="1">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">" &lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David; </Verse>
          * </Poetic>
-         * <Poetic level="2">
+         * <QuoteBlock level="2">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </Verse>
          * </Poetic>
-         * <Poetic level="2">
+         * <QuoteBlock level="2">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">Peace, peace to you, </Verse>
          * </Poetic>
-         * <Poetic level="2">
+         * <QuoteBlock level="2">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">And peace to your helpers! </Verse>
          * </Poetic>
-         * <Poetic level="2">
+         * <QuoteBlock level="2">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">For your God helps you." </Verse>
          * </Poetic>
          *
          * We want to turn them into the following:
          * 
-         * <PoeticVerse id="1CH.12.18" book="1CH" chapter="12" verse="18">
-         *   <Indent level="1">&lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;</Indent>
-         *   <Indent level="2">We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </Indent>
-         *   <Indent level="2">Peace, peace to you, </Indent>
-         *   <Indent level="2">And peace to your helpers! </Indent>
-         *   <Indent level="2">For your God helps you." </Indent>
-         * </PoeticVerse>
-         * 
-         * Any contiguous Poetic nodes which contain verse nodes with the same USFM should be merged in this manner.
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="1" isPartial="true" partialOrder="0">
+         *   &lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;</QuoteBlock>
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="1">
+         *   We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </QuoteBlock>
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="2">
+         *   Peace, peace to you, </QuoteBlock>
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="3">
+         *   And peace to your helpers! </QuoteBlock>
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="4">
+         *   For your God helps you." </QuoteBlock>
          * 
          * Even more problematic, Isaiah 37:22 (problematic from a solving this problem perspective, not from a verse
          * context perspective):
@@ -197,22 +203,22 @@ public partial class Token
          *        &lt;SmallCaps&gt;Lord &lt;/SmallCaps&gt;has spoken concerning him: 
          *  	</Verse>
          * </Paragraph>
-         * <Poetic level="1">
+         * <QuoteBlock level="1">
          *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">“The virgin, the daughter of Zion, </Verse>
-         * </Poetic>
-         * <Poetic level="2">
+         * </QuoteBlock>
+         * <QuoteBlock level="2">
          *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">Has despised you, laughed you to scorn; </Verse>
-         * </Poetic>
-         * <Poetic level="2">
+         * </QuoteBlock>
+         * <QuoteBlock level="2">
          *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">The daughter of Jerusalem </Verse>
-         * </Poetic>
-         * <Poetic level="2">
+         * </QuoteBlock>
+         * <QuoteBlock level="2">
          *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">Has shaken &lt;Italics&gt;her
          *      &lt;/Italics&gt;head behind your back! </Verse>
-         * </Poetic>
+         * </QuoteBlock>
          * 
          * In this case we have a verse which is spread across two distinct visual nodes. We can't put the poetic lines
-         * within the Paragraph above, because that's not now it looks in the Bible, and we can't move the plain text
+         * within the Paragraph above, because that's not how it looks in the Bible, and we can't move the plain text
          * verse to the Poetic verse node, because that's a display block, rather than an inline block. So we have to
          * wrestle with the unique fact that we're trying to handle displaying the verse by itself, as well as inline
          * with the remainder of the verse. To do this, we're going to add an optional attribute to the Verse and
@@ -223,16 +229,23 @@ public partial class Token
          * <Paragraph>
          *   ...
          *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="0">
-         *     <VerseLabel>22</VerseLabel>this <Italics>is</Italics> the word which the <SmallCaps>Lord</SmallCaps> has spoken concerning him: 
+         *     <VerseLabel>22</VerseLabel>this <Italics>is</Italics> the word which the <SmallCaps>Lord</SmallCaps> has
+         *       spoken concerning him:
          *   </Verse>
          * </Paragraph>
-         * <PoeticVerse id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="1">
-         *   <Indent level="1">“The virgin, the daughter of Zion, </Indent>
-         *   <Indent level="2">Has despised you, laughed you to scorn; </Indent>
-         *   <Indent level="2">The daughter of Jerusalem </Indent>
-         *   <Indent level="2">Has shaken <Italics>her</Italics> head behind your back! </Indent>
-         * </PoeticVerse>
+         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="1">“The
+         *   virgin, the daughter of Zion, </QuoteBlock>
+         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="2">Has
+         *   despised you, laughed you to scorn; </QuoteBlock>
+         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="3">The
+         *   daughter of Jerusalem </QuoteBlock>
+         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="4">Has shaken
+         *   <Italics>her</Italics> head behind your back! </Indent>
          *
+         * The down-side to this approach is that it makes it difficult to have a simple way to find verses that might
+         * contain specific words or phrases. Because of this, we might want to consider adding a "content" attribute
+         * to the Verse and QuoteBlock nodes, which would contain the entire verse, and then we could use that to
+         * search for specific verses.
          */
 
         return content;
@@ -245,7 +258,7 @@ public partial class Token
         // - all of our children are understood.
 
         bool understood = IsRoot || IsVersion || IsBook || IsChapter || IsChapterLabel || IsVerseLabel || IsSection || IsHeading || IsParagraph
-                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics || IsSmallCaps || IsPoetic;
+                        || IsVerse || IsContent || IsNote || IsNoteBody || IsItalics || IsSmallCaps || IsQuoteBlock;
         if (!understood)
         {
             Console.WriteLine($"I don't understand {_tag} {_class}");
@@ -276,7 +289,7 @@ public partial class Token
     private bool IsNoteBody => _tag == "span" && _class.StartsWith("class=\" body");
     private bool IsItalics => _tag == "span" && _class == "class=\"it\"";
     private bool IsSmallCaps => _tag == "span" && _class == "class=\"sc\"";
-    private bool IsPoetic => _tag == "div" && PoeticRegex().IsMatch(_class);
+    private bool IsQuoteBlock => _tag == "div" && QuoteBlockRegex().IsMatch(_class);
 
     private List<KeyValuePair<string, string>> GetAttributesFromRegex(Regex regex, params (string source, string dest)[] mappings)
     {
@@ -331,10 +344,10 @@ public partial class Token
                 ("chapter", "chapter"),
                 ("verse", "verse")));
         } 
-        else if (IsPoetic)
+        else if (IsQuoteBlock)
         {
             _attributes.AddRange(GetAttributesFromRegex(
-                PoeticRegex(),
+                QuoteBlockRegex(),
                 ("level", "level")));
         }
 

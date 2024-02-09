@@ -77,8 +77,7 @@ public partial class Token
         content = PurgeNotes(content);
         content = ProcessSectionHeaders(content);
         content = ProcessContentNodes(content);
-        content = ProcessTypeFaceNodes(content);
-        content = ProcessPoeticVerses(content);
+        content = ProcessQuoteBlocks(content);
         
 
         return content[6..^7];
@@ -144,18 +143,8 @@ public partial class Token
         }
         return xmlDoc.OuterXml;
     }
-
-    private string ProcessTypeFaceNodes(string content)
-    {
-        // Todo: we don't need this. We can have semantic tags in the text. What was I thinking?
-        return content
-            .Replace("<Italics>", "&lt;Italics&gt;")
-            .Replace("</Italics>", "&lt;/Italics&gt;")
-            .Replace("<SmallCaps>", "&lt;SmallCaps&gt;")
-            .Replace("</SmallCaps>", "&lt;/SmallCaps&gt;");
-    }
-
-    private string ProcessPoeticVerses(string content)
+    
+    private string ProcessQuoteBlocks(string content)
     {
         /*
          * We are going to assume that the "Q" in the styling refers to a quote block level, and not anything to do with

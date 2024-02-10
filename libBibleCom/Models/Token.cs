@@ -1,4 +1,5 @@
 ﻿using OneOf;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Xml;
 
@@ -78,6 +79,7 @@ public partial class Token
         content = ProcessSectionHeaders(content);
         content = ProcessContentNodes(content);
         content = ProcessQuoteBlocks(content);
+        content = ProcessPartials(content);
         
 
         return content[6..^7];
@@ -150,8 +152,6 @@ public partial class Token
          * We are going to assume that the "Q" in the styling refers to a quote block level, and not anything to do with
          * whether it's a poetic line (as the documentation seems to imply).
          *
-         * 
-         * 
          * Currently, QuoteBlock verses look like this: (As a child of a chapter node):
          * <QuoteBlock level="1">
          *   <Verse id="1CH.12.18" book="1CH" chapter="12" verse="18">" &lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David; </Verse>
@@ -171,15 +171,15 @@ public partial class Token
          *
          * We want to turn them into the following:
          * 
-         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="1" isPartial="true" partialOrder="0">
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="1">
          *   &lt;Italics&gt;We &lt;/Italics&gt; &lt;Italics&gt;are &lt;/Italics&gt;yours, O David;</QuoteBlock>
-         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="1">
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2">
          *   We &lt;Italics&gt;are &lt;/Italics&gt;on your side, O son of Jesse! </QuoteBlock>
-         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="2">
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2">
          *   Peace, peace to you, </QuoteBlock>
-         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="3">
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2">
          *   And peace to your helpers! </QuoteBlock>
-         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2" isPartial="true" partialOrder="4">
+         * <QuoteBlock id="1CH.12.18" book="1CH" chapter="12" verse="18" level="2">
          *   For your God helps you." </QuoteBlock>
          * 
          * Even more problematic, Isaiah 37:22 (problematic from a solving this problem perspective, not from a verse
@@ -210,33 +210,52 @@ public partial class Token
          * within the Paragraph above, because that's not how it looks in the Bible, and we can't move the plain text
          * verse to the Poetic verse node, because that's a display block, rather than an inline block. So we have to
          * wrestle with the unique fact that we're trying to handle displaying the verse by itself, as well as inline
-         * with the remainder of the verse. To do this, we're going to add an optional attribute to the Verse and
-         * PoeticVerse Nodes, partial="true", along with partialOrderId="0" etc. Then, we can ignore these tags when
-         * rendering the flow of the document, but when pulling out a specific verse, we can ensure that we get all
-         * of the verse. 
+         * with the remainder of the verse. 
          * 
          * <Paragraph>
          *   ...
-         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="0">
+         *   <Verse id="ISA.37.22" book="ISA" chapter="37" verse="22">
          *     <VerseLabel>22</VerseLabel>this <Italics>is</Italics> the word which the <SmallCaps>Lord</SmallCaps> has
          *       spoken concerning him:
          *   </Verse>
          * </Paragraph>
-         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="1">“The
-         *   virgin, the daughter of Zion, </QuoteBlock>
-         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="2">Has
-         *   despised you, laughed you to scorn; </QuoteBlock>
-         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="3">The
-         *   daughter of Jerusalem </QuoteBlock>
-         * <QuoteBlock id="ISA.37.22" book="ISA" chapter="37" verse="22" isPartial="true" partialOrderId="4">Has shaken
-         *   <Italics>her</Italics> head behind your back! </Indent>
+         * <QuoteBlock level="1" id="ISA.37.22" book="ISA" chapter="37" verse="22">“The virgin, the daughter of Zion, </QuoteBlock>
+         * <QuoteBlock level="2" id="ISA.37.22" book="ISA" chapter="37" verse="22">Has despised you, laughed you to scorn; </QuoteBlock>
+         * <QuoteBlock level="2" id="ISA.37.22" book="ISA" chapter="37" verse="22">The daughter of Jerusalem </QuoteBlock>
+         * <QuoteBlock level="2" id="ISA.37.22" book="ISA" chapter="37" verse="22">Has shaken <Italics>her</Italics> head behind your back! </Indent>
          *
-         * The down-side to this approach is that it makes it difficult to have a simple way to find verses that might
-         * contain specific words or phrases. Because of this, we might want to consider adding a "content" attribute
-         * to the Verse and QuoteBlock nodes, which would contain the entire verse, and then we could use that to
-         * search for specific verses.
          */
 
+        XmlDocument xmlDoc = new();
+        xmlDoc.LoadXml(content);
+
+        while (xmlDoc.SelectSingleNode("//QuoteBlock/Verse") != null)
+        {
+            XmlNode node = xmlDoc.SelectSingleNode("//QuoteBlock/Verse")!;
+
+            // find the parent node of node
+            XmlNode parentNode = node.ParentNode!;
+
+            // We want to move all the attributes from our node to our parent node
+            foreach (XmlAttribute a in node.Attributes)
+            {
+                XmlAttribute attr = xmlDoc.CreateAttribute(a.Name);
+                attr.Value = a.Value;
+                parentNode.Attributes.Append(attr);
+            }
+
+            // bomb out if we have more than one child node.
+            Debug.Assert(parentNode.ChildNodes.Count == 1);
+            
+            XmlNode childNode = parentNode.ChildNodes.Item(0)!;
+           // XmlNode newText = childNode;   //  (childNode.InnerXml + " ");
+            parentNode.ReplaceChild(childNode, node);
+        }
+        return xmlDoc.OuterXml;
+    }
+
+    private string ProcessPartials(string content)
+    {
         return content;
     }
 

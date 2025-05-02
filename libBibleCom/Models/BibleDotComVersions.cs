@@ -71,7 +71,7 @@ internal class BibleDotComVersions
         public required string local_title { get; set; }
         public required Language language { get; set; }
         public required string title { get; set; }
-        public required Offline offline { get; set; }
+        //public required Offline offline { get; set; }
         public required bool text { get; set; }
         public uint? metadata_build { get; set; }
         public required string abbreviation { get; set; }

@@ -18,41 +18,41 @@ internal static class Program
 
     static async Task Main()
     {
-        //BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
-        //string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
-        //Console.WriteLine(b);
-        //Console.ReadKey();
+        BDC.BibleDotComService.SetCacheLifespan(TimeSpan.FromDays(100));
+        string b = await BDC.BibleDotComService.GetDecodedVersion("eng", "NKJV");
+        Console.WriteLine(b);
+        Console.ReadKey();
 
-        string? sourceFile = null;
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            sourceFile = "C:\\Users\\jpenman\\AppData\\Roaming\\LibBibleDotCom\\114-19.zip";
-        }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-        {
-            sourceFile = "/Users/joshuapenman/Library/Application Support/LibBibleDotCom/114-19.zip";
-        }
-        
-        await using FileStream file = File.OpenRead(sourceFile);
-        using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Read))
-        {
-            foreach (ZipArchiveEntry entry in zip.Entries)
-            {
-                if (entry.FullName == "ISA/37.html")
-                {
-                    await using Stream stream = entry.Open();
-                    StreamReader sr = new StreamReader(stream);
-                    string chapterName = entry.Name;
-                    Console.WriteLine(chapterName);
-                    string chapterContent = sr.ReadToEnd();
-                    Console.WriteLine("Plaintext");
-                    Console.WriteLine(chapterContent);
-                    Token t = BDC.BibleDotComService.Tokenize(chapterContent);
-                    Console.WriteLine("Tokenized");
-                    Console.WriteLine(t.ToXml());
-                }
-            }
-        }
+        //string? sourceFile = null;
+        //if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        //{
+        //    sourceFile = "C:\\Users\\jpenma\\AppData\\Roaming\\LibBibleDotCom\\114-19.zip";
+        //}
+        //else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        //{
+        //    sourceFile = "/Users/joshuapenman/Library/Application Support/LibBibleDotCom/114-19.zip";
+        //}
+
+        //await using FileStream file = File.OpenRead(sourceFile);
+        //using (ZipArchive zip = new ZipArchive(file, ZipArchiveMode.Read))
+        //{
+        //    foreach (ZipArchiveEntry entry in zip.Entries)
+        //    {
+        //        if (entry.FullName == "ISA/37.html")
+        //        {
+        //            await using Stream stream = entry.Open();
+        //            StreamReader sr = new StreamReader(stream);
+        //            string chapterName = entry.Name;
+        //            Console.WriteLine(chapterName);
+        //            string chapterContent = sr.ReadToEnd();
+        //            Console.WriteLine("Plaintext");
+        //            Console.WriteLine(chapterContent);
+        //            Token t = BDC.BibleDotComService.Tokenize(chapterContent);
+        //            Console.WriteLine("Tokenized");
+        //            Console.WriteLine(t.ToXml());
+        //        }
+        //    }
+        //}
         //        await using Stream stream = entry.Open();
         //        StreamReader sr = new StreamReader(stream);
         //        string chapterName = entry.Name;

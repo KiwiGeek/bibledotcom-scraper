@@ -121,7 +121,7 @@ public static class BibleDotComService
                     Android = rawlanguage.platforms.android,
                     Facebook = rawlanguage.platforms.facebook
                 },
-                OfflineInfo = new Offline
+                /*OfflineInfo = new Offline
                 {
                     Build = new Build
                     {
@@ -141,7 +141,11 @@ public static class BibleDotComService
                     AllowRedownload = rawlanguage.offline.allow_redownload,
                     RequireEmailAgreement = rawlanguage.offline.require_email_agreement,
                     AgreementVersion = rawlanguage.offline.agreement_version
-                },
+                },*/
+                // offline info has been scrubbed.
+                // zip files are hosted at a URL such as: 
+                //https://offline-bibles-cdn.youversionapi.com/bible/text/offline/114-19.zip
+                // there must be a json for getting version info, but I have not looked into it yet.
                 MetadataBuild = rawlanguage.metadata_build
             }).ToList();
     }
